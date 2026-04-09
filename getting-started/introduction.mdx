@@ -1,0 +1,99 @@
+---
+title: 'Introduction'
+description: 'typescript-eslint enables ESLint to lint TypeScript code by providing a custom parser, plugin, and shared configurations.'
+keywords: ['typescript-eslint', 'eslint', 'typescript', 'linting', 'static analysis']
+---
+
+## What is typescript-eslint?
+
+[ESLint](https://eslint.org) is the de facto standard JavaScript linter, and [TypeScript](https://typescriptlang.org) has become one of the most widely adopted supersets of JavaScript. But ESLint is built to parse and understand JavaScript — it cannot natively parse TypeScript syntax.
+
+**typescript-eslint** bridges that gap. It provides the tooling necessary to run ESLint on TypeScript code, including:
+
+- A **custom parser** that converts TypeScript syntax into a format ESLint can understand
+- An **ESLint plugin** containing hundreds of TypeScript-specific lint rules
+- **Shared configurations** that bundle recommended rule sets, ready to use with zero configuration
+
+## Key components
+
+### Parser (`@typescript-eslint/parser`)
+
+ESLint uses parsers to turn source code into an AST (Abstract Syntax Tree) it can walk and analyze. The default ESLint parser only understands JavaScript. `@typescript-eslint/parser` replaces it, giving ESLint the ability to read TypeScript files — including syntax like generics, enums, decorators, and type annotations.
+
+### Plugin (`@typescript-eslint/eslint-plugin`)
+
+The plugin delivers lint rules that go beyond what JavaScript-focused rules can check. Rules range from style enforcement (consistent type assertions) to correctness checks (no floating promises, no misused generics). Many of the most powerful rules use TypeScript's own type checker to reason about your code.
+
+### `typescript-eslint` package
+
+The `typescript-eslint` package is the recommended high-level entry point. It re-exports the parser and plugin, and exposes shared configurations and a `config()` helper for building your ESLint config:
+
+```ts
+import tseslint from 'typescript-eslint';
+```
+
+### Shared configurations
+
+typescript-eslint ships several pre-built rule sets so you don't need to configure individual rules from scratch:
+
+| Config | Description |
+|--------|-------------|
+| `recommended` | Recommended rules for code correctness that you can drop in without additional configuration. |
+| `recommendedTypeChecked` | All of `recommended`, plus additional rules that require type information. |
+| `strict` | A superset of `recommended` with more opinionated rules that may also catch bugs. |
+| `strictTypeChecked` | All of `recommended`, `recommendedTypeChecked`, and `strict`, plus additional strict type-aware rules. |
+| `stylistic` | Rules that enforce consistent styling without significantly catching bugs or changing logic. |
+| `stylisticTypeChecked` | All of `stylistic`, plus additional stylistic rules that require type information. |
+
+## How ESLint and TypeScript work together
+
+```
+Your TypeScript source files
+          │
+          ▼
+  @typescript-eslint/parser   ←── TypeScript compiler APIs
+          │
+          ▼
+  ESLint AST traversal
+          │
+          ▼
+  @typescript-eslint/eslint-plugin rules
+          │
+          ▼
+  Lint errors and warnings
+```
+
+ESLint drives the process: it reads your config, finds source files, and invokes the parser on each file. The parser uses TypeScript's compiler to produce an AST. ESLint then applies your configured rules — including typescript-eslint rules — to that AST.
+
+For **typed linting**, the parser also retrieves full type information from TypeScript for each file. This allows rules to reason about the actual types involved, not just the written syntax.
+
+## Key features
+
+**TypeScript syntax support** — Parses all TypeScript syntax including generics, enums, decorators, type assertions, and more.
+
+**Hundreds of lint rules** — Purpose-built rules for TypeScript patterns: unsafe type assertions, unhandled promises, misused `any`, redundant type annotations, and much more.
+
+**Type-aware rules** — A subset of rules harness TypeScript's type checker to catch bugs that are invisible without type information, such as calling a method on a potentially `null` value or `await`-ing a non-Promise.
+
+**Shared configurations** — Drop-in rule sets (`recommended`, `strict`, `stylistic`, and their type-checked variants) that work out of the box.
+
+**Flat config and legacy config support** — Works with both ESLint's modern flat config format (`eslint.config.mjs`) and the legacy `.eslintrc.*` format.
+
+**CJS and ESM compatible** — The `typescript-eslint` package supports both CommonJS `require()` and ES module `import` usage.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/getting-started/quickstart">
+    Go from zero to linting TypeScript in minutes using the recommended flat config setup.
+  </Card>
+  <Card title="Typed linting" icon="shield-check" href="/getting-started/typed-linting">
+    Enable type-aware rules that use TypeScript's type checker for deeper analysis.
+  </Card>
+  <Card title="Legacy ESLint setup" icon="file-code" href="/getting-started/legacy-eslint-setup">
+    Set up typescript-eslint using the older `.eslintrc.*` config format.
+  </Card>
+  <Card title="Shared configurations" icon="layers" href="/configuration/shared-configs">
+    Explore all available shared configs and choose the right one for your project.
+  </Card>
+</CardGroup>

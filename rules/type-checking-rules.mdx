@@ -1,0 +1,697 @@
+---
+title: "Type-checking rules"
+description: "Rules that use TypeScript's type checker for deeper static analysis — catching bugs that syntax-only rules cannot detect."
+keywords: ["eslint", "typescript", "type-checking", "type-aware linting", "rules"]
+---
+
+Type-checking rules (sometimes called "type-aware rules") call into TypeScript's type checker during linting. This lets them reason about the _types_ of values at any point in your code, not just the syntax. They catch a class of bugs — unhandled promises, unsafe `any` usage, calling non-functions — that no syntax-based rule can detect.
+
+## Why type-checking rules are special
+
+A standard ESLint rule only sees the AST of the file being linted. A type-checking rule also has access to the full TypeScript program, including the type information computed by `tsc`. This means the rule can answer questions such as:
+
+- Is this value a `Promise`? (`no-floating-promises`)
+- Does this assignment make the receiver type `any`? (`no-unsafe-assignment`)
+- Could this template expression produce `[object Object]`? (`restrict-template-expressions`)
+
+The tradeoff is a small performance cost: TypeScript must build its type model before linting can begin.
+
+## Setup
+
+Type-checking rules require `parserOptions.projectService` (recommended) or `parserOptions.project` to be set in your ESLint configuration.
+
+<Tabs>
+  <Tab title="Flat config (recommended)">
+    ```js eslint.config.mjs
+    import { defineConfig } from 'eslint/config';
+    import tseslint from 'typescript-eslint';
+
+    export default defineConfig(
+      ...tseslint.configs.recommendedTypeChecked,
+      {
+        languageOptions: {
+          parserOptions: {
+            projectService: true,
+            tsconfigRootDir: import.meta.dirname,
+          },
+        },
+      },
+    );
+    ```
+  </Tab>
+  <Tab title="Legacy .eslintrc">
+    ```json .eslintrc.json
+    {
+      "extends": ["plugin:@typescript-eslint/recommended-type-checked"],
+      "parser": "@typescript-eslint/parser",
+      "parserOptions": {
+        "project": true,
+        "tsconfigRootDir": "__dirname"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+If you enable type-checked rules but do not configure `parserOptions.projectService` or `parserOptions.project`, you will get a parse error: "You have used a rule which requires parserServices to be generated". See the [Typed Linting guide](/getting-started/typed-linting) for full setup instructions.
+</Warning>
+
+<Tip>
+Use `parserOptions.projectService: true` instead of `parserOptions.project: true`. The project service is faster and handles most common project structures automatically.
+</Tip>
+
+---
+
+## Core type-checking rules
+
+### `no-floating-promises`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Requires all `Promise`-like values to be handled — either `await`ed, returned, or chained with `.catch()`. An unhandled rejection is silently swallowed, making this one of the most impactful rules to enable.
+
+```typescript
+// ❌ Violation — the promise is not awaited
+async function saveUser(user: User): Promise<void> {
+  db.save(user); // the rejection from db.save is lost
+}
+
+// ✅ Fix — await the result
+async function saveUser(user: User): Promise<void> {
+  await db.save(user);
+}
+
+// ✅ Also acceptable — explicit void marks intentional fire-and-forget
+async function saveUser(user: User): Promise<void> {
+  void db.save(user);
+}
+```
+
+**Key options:**
+
+```json
+["error", {
+  "ignoreVoid": true,           // allow `void promise` to suppress the error (default: true)
+  "ignoreIIFE": false,          // allow top-level async IIFEs
+  "checkThenables": false,      // extend to all thenable objects, not just Promise
+  "allowForKnownSafePromises": [] // type specifiers that are safe to float
+}]
+```
+
+---
+
+### `no-misused-promises`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Prevents async functions from being passed where the caller expects a synchronous return. A common mistake is passing an async callback to array methods or event handlers that ignore the returned `Promise`.
+
+```typescript
+// ❌ Violation — Array.forEach ignores return values, so the async callback's
+// promise is never awaited
+const items = [1, 2, 3];
+items.forEach(async (item) => {
+  await processItem(item);
+});
+
+// ✅ Fix — use for...of so you can await inside
+for (const item of items) {
+  await processItem(item);
+}
+
+// ❌ Violation — the conditional will always be truthy because an async function
+// always returns a Promise, not a boolean
+if (async () => false) {
+  // ...
+}
+```
+
+**Key options:**
+
+```json
+["error", {
+  "checksConditionals": true,   // check async functions in boolean contexts
+  "checksVoidReturn": true,     // check async functions where void is expected
+  "checksSpreads": true         // check async functions in spread positions
+}]
+```
+
+---
+
+### `await-thenable`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows `await`ing a value that is not a `Promise` or thenable. Awaiting a non-Promise value is harmless at runtime but indicates a logic error — typically a missing `async` call or an incorrect variable.
+
+```typescript
+async function loadUser(id: string): Promise<User> {
+  return fetchUser(id);
+}
+
+// ❌ Violation — getUserById returns User, not Promise<User>
+function getUserById(id: string): User {
+  return users[id];
+}
+const user = await getUserById('123'); // runtime: works, but await is meaningless
+
+// ❌ More subtle — awaiting a function reference, not a call
+async function run(): Promise<void> {
+  await fetchUser; // forgot the parentheses!
+}
+
+// ✅ Fix — await the actual call
+async function run(): Promise<void> {
+  await fetchUser('123');
+}
+```
+
+---
+
+### `no-unsafe-assignment`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows assigning a value typed as `any` to a typed variable or property. This prevents `any` from silently "infecting" the rest of your codebase and removing type safety downstream.
+
+```typescript
+// ❌ Violation — JSON.parse returns `any`; assigning it to a typed variable
+// erases type information
+const data: Record<string, string> = JSON.parse(response.body);
+//    ^^^^ type safety gone — data is effectively `any`
+
+// ✅ Fix — validate the unknown data before asserting the type
+const raw: unknown = JSON.parse(response.body);
+if (isValidRecord(raw)) {
+  const data: Record<string, string> = raw;
+}
+
+// ❌ Violation — destructuring from an any-typed source
+const { name, age } = getUser(); // getUser() returns any
+
+// ✅ Fix — type the function return explicitly
+function getUser(): { name: string; age: number } { /* ... */ }
+```
+
+---
+
+### `no-unsafe-call`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows calling values typed as `any`. If TypeScript doesn't know something is callable, the call is unsafe and should be avoided.
+
+```typescript
+declare const fn: any;
+
+// ❌ Violation
+fn();
+fn`template`;
+new fn();
+
+// ✅ Fix — type fn properly
+declare const fn: () => void;
+fn();
+```
+
+---
+
+### `no-unsafe-member-access`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows accessing properties on `any`-typed values. Any property access on `any` returns `any`, silently bypassing the type system.
+
+```typescript
+declare const user: any;
+
+// ❌ Violation
+user.name;
+user['email'];
+user.address.city; // all return any
+```
+
+---
+
+### `no-unsafe-return`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows returning `any`-typed values from functions that have a concrete return type annotation. This stops `any` from escaping through function boundaries.
+
+```typescript
+function getUser(): User {
+  // ❌ Violation — JSON.parse returns any, which is returned from a typed function
+  return JSON.parse(localStorage.getItem('user')!);
+}
+
+function getUser(): User {
+  // ✅ Fix — validate the parsed value
+  const raw: unknown = JSON.parse(localStorage.getItem('user') ?? '{}');
+  return validateUser(raw);
+}
+```
+
+---
+
+### `no-unsafe-argument`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows passing `any`-typed values as arguments to typed function parameters. This is the call-site complement to `no-unsafe-return`.
+
+```typescript
+function processUser(user: User): void { /* ... */ }
+
+declare const data: any;
+
+// ❌ Violation
+processUser(data);
+
+// ✅ Fix — narrow the type first
+if (isUser(data)) {
+  processUser(data);
+}
+```
+
+---
+
+### `restrict-template-expressions`
+
+**Config:** `recommended-type-checked` (strict in `strict-type-checked`) | **Requires type info:** yes
+
+Enforces that template literal expressions evaluate to a type with a meaningful `toString()` representation. By default, only `string` is allowed. You can opt in to other types with the rule options.
+
+```typescript
+// ❌ Violation — obj.toString() will produce "[object Object]"
+const obj = { name: 'Alice' };
+const message = `Hello, ${obj}`;
+
+// ❌ Violation — null/undefined produce "null"/"undefined" (off by default, enforced in strict)
+const name: string | null = getName();
+const greeting = `Hello, ${name}`;
+
+// ✅ Fix — explicitly convert to string
+const message = `Hello, ${JSON.stringify(obj)}`;
+const greeting = `Hello, ${name ?? 'guest'}`;
+```
+
+**Key options (all default `true` in recommended, `false` in strict):**
+
+```json
+["error", {
+  "allowAny": true,       // allow any in template expressions
+  "allowBoolean": true,   // allow booleans
+  "allowNullish": true,   // allow null/undefined
+  "allowNumber": true,    // allow numbers
+  "allowRegExp": true,    // allow RegExp
+  "allowNever": true      // allow never
+}]
+```
+
+---
+
+### `restrict-plus-operands`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Requires both operands of the `+` operator to be the same type. Using `+` with mixed types (e.g., `number + string`) produces surprising coercions.
+
+```typescript
+// ❌ Violation — string + number produces a string, not a number
+const width = '100' + 50; // "10050", not 150
+
+// ❌ Violation — any + any is unsafe
+declare const a: any;
+declare const b: any;
+const result = a + b;
+
+// ✅ Fix — ensure operands have matching types
+const width = Number('100') + 50;
+const result: string = `${a}${b}`;
+```
+
+---
+
+### `unbound-method`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Enforces that class methods are invoked with the correct `this` context. Extracting a method into a variable loses its `this` binding.
+
+```typescript
+class Timer {
+  elapsed = 0;
+
+  tick(): void {
+    this.elapsed++;
+  }
+}
+
+const timer = new Timer();
+
+// ❌ Violation — `tick` loses its `this` binding
+const { tick } = timer;
+setInterval(tick, 1000); // `this` inside tick is undefined
+
+// ✅ Fix — bind the method explicitly
+setInterval(timer.tick.bind(timer), 1000);
+// or use an arrow function wrapper
+setInterval(() => timer.tick(), 1000);
+```
+
+---
+
+### `no-floating-promises` with arrays
+
+The rule also catches arrays of promises, which are equally easy to forget:
+
+```typescript
+// ❌ Violation — array of promises is unhandled
+[fetchUser(), fetchPosts(), fetchComments()];
+
+// ✅ Fix — use Promise.all
+await Promise.all([fetchUser(), fetchPosts(), fetchComments()]);
+```
+
+---
+
+### `require-await`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows `async` functions that contain no `await` expressions. An `async` function without `await` is synchronous — there is no reason for it to be `async`.
+
+```typescript
+// ❌ Violation — the function is sync, marking it async is misleading
+async function getUser(id: string): Promise<User> {
+  return users.find(u => u.id === id)!;
+}
+
+// ✅ Fix — remove async if there is no await
+function getUser(id: string): User | undefined {
+  return users.find(u => u.id === id);
+}
+```
+
+---
+
+### `no-implied-eval`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows passing string literals to `setTimeout`, `setInterval`, and `execScript`. Strings passed to these functions are executed like `eval()`, which is a security risk and bypasses TypeScript's type system.
+
+```typescript
+// ❌ Violation
+setTimeout('doSomething()', 100);
+setInterval('counter++', 1000);
+
+// ✅ Fix — pass a function reference
+setTimeout(doSomething, 100);
+setInterval(() => { counter++; }, 1000);
+```
+
+---
+
+### `only-throw-error`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Requires that only `Error` objects (or subclasses) are thrown. Throwing non-errors loses the stack trace and makes error handling harder.
+
+```typescript
+// ❌ Violation
+throw 'Something went wrong';
+throw 404;
+throw { code: 'NOT_FOUND' };
+
+// ✅ Fix — throw an Error
+throw new Error('Something went wrong');
+throw new TypeError('Expected a number');
+
+class NotFoundError extends Error {
+  constructor(public readonly code = 'NOT_FOUND') {
+    super('Resource not found');
+  }
+}
+throw new NotFoundError();
+```
+
+---
+
+### `no-base-to-string`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows calling `.toString()` on values that would produce `[object Object]`. This is usually a mistake — the developer probably intended to access a property or use `JSON.stringify`.
+
+```typescript
+interface Config { host: string; port: number }
+const config: Config = { host: 'localhost', port: 8080 };
+
+// ❌ Violation — produces "[object Object]"
+const message = `Connected to ${config}`;
+
+// ✅ Fix
+const message = `Connected to ${config.host}:${config.port}`;
+```
+
+---
+
+### `no-for-in-array`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows `for...in` loops over arrays. `for...in` iterates over enumerable property names as strings, which is almost never what you want for arrays. Use `for...of` or `forEach` instead.
+
+```typescript
+const items = ['a', 'b', 'c'];
+
+// ❌ Violation — i is a string key, not a numeric index
+for (const i in items) {
+  console.log(items[i]);
+}
+
+// ✅ Fix — use for...of
+for (const item of items) {
+  console.log(item);
+}
+```
+
+---
+
+### `no-unsafe-enum-comparison`
+
+**Config:** `recommended-type-checked` | **Requires type info:** yes
+
+Disallows comparing enum values with literal values of a different type. TypeScript enums have different runtime representations depending on whether they are string or number enums, and cross-type comparisons are always `false`.
+
+```typescript
+enum Direction { Up = 'UP', Down = 'DOWN' }
+
+// ❌ Violation — comparing a string enum with a number literal
+if (direction === 0) { /* never true */ }
+
+// ✅ Fix — compare with the enum member
+if (direction === Direction.Up) { /* ... */ }
+```
+
+---
+
+## Additional type-checking rules (strict-type-checked)
+
+These rules are part of `strict-type-checked` and provide additional safety guarantees.
+
+<AccordionGroup>
+  <Accordion title="no-unnecessary-condition">
+    Disallows conditionals whose value is always truthy or always falsy based on type information. This rule flags dead code caused by overly broad types or incorrect logic.
+
+    ```typescript
+    // ❌ Violation — x is string, which is never null/undefined
+    function greet(x: string): string {
+      if (x) { // always truthy for a non-nullable string
+        return `Hello ${x}`;
+      }
+      return 'Hello';
+    }
+
+    // ✅ Fix — use the correct type or remove the check
+    function greet(x: string | null): string {
+      if (x) {
+        return `Hello ${x}`;
+      }
+      return 'Hello';
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="no-unnecessary-type-conversion">
+    Disallows type conversions that are redundant because the value already has the target type.
+
+    ```typescript
+    const name: string = 'Alice';
+
+    // ❌ Violation — name is already a string
+    const result = String(name);
+    const result2 = `${name}`;
+    const result3 = name.toString();
+    ```
+  </Accordion>
+
+  <Accordion title="no-unnecessary-type-parameters">
+    Disallows type parameters on functions and types when they can be replaced with the concrete type they would always be substituted with.
+
+    ```typescript
+    // ❌ Violation — T is always string; the generic adds no flexibility
+    function identity<T extends string>(x: T): T {
+      return x;
+    }
+
+    // ✅ Fix
+    function identity(x: string): string {
+      return x;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="no-confusing-void-expression">
+    Disallows `void` in positions where it can be confusing — such as inside an arrow function body that is expected to return a value.
+
+    ```typescript
+    // ❌ Violation — looks like it returns a value but actually returns void
+    const log = (msg: string) => void console.log(msg);
+
+    // ✅ Fix — use explicit braces
+    const log = (msg: string): void => { console.log(msg); };
+    ```
+  </Accordion>
+
+  <Accordion title="no-deprecated">
+    Disallows using symbols annotated with `@deprecated` JSDoc tags.
+
+    ```typescript
+    /** @deprecated Use `newFunction` instead */
+    function oldFunction(): void {}
+
+    // ❌ Violation
+    oldFunction();
+
+    // ✅ Fix
+    newFunction();
+    ```
+  </Accordion>
+
+  <Accordion title="no-mixed-enums">
+    Disallows enums that mix numeric and string members. Mixed enums produce confusing reverse-mapping behavior.
+
+    ```typescript
+    // ❌ Violation
+    enum Status {
+      Active = 1,
+      Inactive = 'INACTIVE', // mixing number and string
+    }
+
+    // ✅ Fix — use one type consistently
+    enum Status {
+      Active = 'ACTIVE',
+      Inactive = 'INACTIVE',
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="use-unknown-in-catch-callback-variable">
+    Requires `catch` clause variables and `.catch()` callback parameters to be typed as `unknown` rather than `any`. This forces you to check the error type before using it.
+
+    ```typescript
+    // ❌ Violation — err is implicitly any
+    promise.catch((err) => {
+      console.error(err.message); // no type safety
+    });
+
+    // ✅ Fix
+    promise.catch((err: unknown) => {
+      if (err instanceof Error) {
+        console.error(err.message);
+      }
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="return-await">
+    Enforces consistent use of `return await`. Without `await`, a rejected promise from the inner function is not caught by a surrounding `try/catch`. The rule default (`error-handling-correctness-only`) only enforces `await` in `try/catch` blocks where it matters for correctness.
+
+    ```typescript
+    // ❌ Violation — the rejection from fetchData() bypasses the catch block
+    async function loadData(): Promise<Data> {
+      try {
+        return fetchData(); // not awaited — catch won't fire on rejection
+      } catch (err) {
+        console.error(err);
+        throw err;
+      }
+    }
+
+    // ✅ Fix
+    async function loadData(): Promise<Data> {
+      try {
+        return await fetchData();
+      } catch (err) {
+        console.error(err);
+        throw err;
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="no-misused-spread">
+    Disallows spreading values in positions where the spread is semantically incorrect — for example, spreading a string in an object literal.
+
+    ```typescript
+    // ❌ Violation — spreading a string in an object spreads the character indices
+    const str = 'hello';
+    const obj = { ...str }; // { 0: 'h', 1: 'e', ... }
+
+    // ❌ Violation — spreading a Map in an array spread gives its entries
+    const map = new Map([['a', 1]]);
+    const arr = [...map]; // [['a', 1]] — probably not what was intended
+
+    // ✅ Fix — convert explicitly
+    const chars = [...str]; // ['h', 'e', 'l', 'l', 'o']
+    const entries = [...map.entries()];
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Performance considerations
+
+Type-checking rules require TypeScript to analyze your entire project. For large projects this can add a few seconds to each lint run. Some strategies to mitigate this:
+
+- Use `projectService: true` instead of `project: true` — the project service caches type information more efficiently.
+- Apply type-checked rules only to source files, not test files, using an `ignores` pattern.
+- Run linting incrementally in CI using lint-staged or similar tools.
+
+```js eslint.config.mjs
+import { defineConfig } from 'eslint/config';
+import tseslint from 'typescript-eslint';
+
+export default defineConfig(
+  ...tseslint.configs.recommendedTypeChecked,
+  {
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    // Disable type-checked rules for test files to speed up linting
+    files: ['**/*.test.ts', '**/*.spec.ts'],
+    extends: [tseslint.configs.disableTypeChecked],
+  },
+);
+```

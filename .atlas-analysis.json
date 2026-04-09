@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "typescript-eslint",
+  "projectType": "sdk-library",
+  "projectName": "typescript-eslint",
+  "projectDescription": "The tooling that enables ESLint to support TypeScript, providing a parser, plugin with 100+ rules, and shared configurations for type-aware linting.",
   "theme": "luma",
-  "colors": {
-    "primary": "#364ebc",
-    "light": "#94a4dc"
-  },
-  "favicon": "https://media.brand.dev/db4a22da-bd85-4c40-86ff-1bcb90d9a491.svg",
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/typescript-eslint/typescript-eslint"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/typescript-eslint/typescript-eslint"
-    }
-  },
+  "primaryColor": "#364ebc",
+  "lightColor": "#94a4dc",
+  "darkColor": null,
   "navigation": {
     "tabs": [
       {
@@ -102,5 +90,29 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "TypeScript-aware ESLint parser (@typescript-eslint/parser) supporting full TypeScript AST",
+    "100+ ESLint rules tailored for TypeScript, including type-aware rules using TypeScript's type checker",
+    "Shared configurations (recommended, strict, stylistic) for drop-in linting setup",
+    "Typed linting support that leverages TypeScript's type information for deeper code analysis",
+    "Utilities for building custom ESLint rules with TypeScript support (@typescript-eslint/utils)",
+    "Rule tester with full TypeScript support (@typescript-eslint/rule-tester)",
+    "Scope analysis for TypeScript code (@typescript-eslint/scope-manager)"
+  ],
+  "publicApiSurface": [
+    "tseslint.config() — helper to define flat ESLint configs with type safety",
+    "tseslint.configs.recommended — recommended ruleset without type information",
+    "tseslint.configs.recommendedTypeChecked — recommended ruleset requiring type information",
+    "tseslint.configs.strict — opinionated strict ruleset",
+    "tseslint.configs.strictTypeChecked — strict ruleset with type information",
+    "tseslint.configs.stylistic — stylistic consistency rules",
+    "tseslint.configs.stylisticTypeChecked — stylistic rules with type information",
+    "tseslint.parser — ESLint parser for TypeScript files",
+    "tseslint.plugin — the @typescript-eslint/eslint-plugin object",
+    "@typescript-eslint/utils ESLintUtils.RuleCreator — factory for custom typed rules",
+    "@typescript-eslint/rule-tester RuleTester — test utility for ESLint rules",
+    "@typescript-eslint/typescript-estree parse() — parse TypeScript into ESTree AST",
+    "@typescript-eslint/scope-manager analyze() — scope analysis for TypeScript AST"
+  ]
 }

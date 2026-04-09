@@ -1,0 +1,427 @@
+---
+title: '@typescript-eslint/rule-tester'
+description: 'A TypeScript-aware RuleTester for testing ESLint rules, with support for type-aware rules, dependency constraints, suggestions, multi-pass fixes, and all major test frameworks.'
+keywords: ['typescript-eslint', 'rule-tester', 'RuleTester', 'testing', 'custom rules', 'typed linting', 'vitest', 'jest', 'mocha']
+---
+
+`@typescript-eslint/rule-tester` is a drop-in replacement for ESLint's built-in `RuleTester` that adds proper TypeScript types, support for type-aware rule testing, multi-pass fix assertions, and compatibility hooks for popular test frameworks.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install --save-dev @typescript-eslint/rule-tester
+```
+
+```bash yarn
+yarn add --dev @typescript-eslint/rule-tester
+```
+
+```bash pnpm
+pnpm add --save-dev @typescript-eslint/rule-tester
+```
+
+</CodeGroup>
+
+## Basic usage
+
+Import `RuleTester`, create an instance, and call `.run()` with your rule and test cases. Each test suite has a `valid` array (code that should produce no errors) and an `invalid` array (code that should produce specific errors).
+
+```ts
+import { RuleTester } from '@typescript-eslint/rule-tester';
+import rule from '../src/rules/my-rule';
+
+const ruleTester = new RuleTester();
+
+ruleTester.run('my-rule', rule, {
+  valid: [
+    // A valid case can be a plain string
+    'const x = 1;',
+    // Or a full options object
+    {
+      code: 'const y = 2;',
+      options: [{ strict: true }],
+    },
+    // Enable JSX parsing per test case
+    {
+      code: 'const z = <div />;',
+      languageOptions: {
+        parserOptions: {
+          ecmaFeatures: { jsx: true },
+        },
+      },
+    },
+  ],
+  invalid: [
+    // Invalid cases must be objects and must list expected errors
+    {
+      code: 'const a = 1;',
+      errors: [
+        {
+          messageId: 'myErrorId',
+          // Optionally assert the message template data
+          data: { variableName: 'a' },
+        },
+      ],
+    },
+  ],
+});
+```
+
+<Note>
+  When no `filename` option is provided, `RuleTester` uses `file.ts` by default, or `react.tsx` when `parserOptions.ecmaFeatures.jsx` is enabled.
+</Note>
+
+## Testing type-aware rules
+
+Rules that use the TypeScript type checker require a `projectService` (or `project`) in `parserOptions`. The recommended approach is `allowDefaultProject`, which type-checks test code without a real `tsconfig.json` on disk.
+
+```ts
+import { RuleTester } from '@typescript-eslint/rule-tester';
+import rule from '../src/rules/no-floating-promises';
+
+const ruleTester = new RuleTester({
+  languageOptions: {
+    parserOptions: {
+      projectService: {
+        allowDefaultProject: ['*.ts*'],
+      },
+      tsconfigRootDir: import.meta.dirname,
+    },
+  },
+});
+
+ruleTester.run('no-floating-promises', rule, {
+  valid: [
+    'async function foo() { await Promise.resolve(); }',
+  ],
+  invalid: [
+    {
+      code: 'async function foo() { Promise.resolve(); }',
+      errors: [{ messageId: 'floatingVoid' }],
+    },
+  ],
+});
+```
+
+<Tip>
+  Use `tsconfigRootDir: import.meta.dirname` (or `__dirname` in CommonJS) so the parser resolves `tsconfig.json` relative to your test file.
+</Tip>
+
+## Test case options
+
+### `ValidTestCase`
+
+```ts
+interface ValidTestCase<Options extends readonly unknown[]> {
+  /** Source code to lint. */
+  readonly code: string;
+  /** Rule options to pass. */
+  readonly options?: Readonly<Options>;
+  /** Virtual filename for the test. */
+  readonly filename?: string;
+  /** Language options (parser, parserOptions, globals). */
+  readonly languageOptions?: TestLanguageOptions;
+  /** ESLint shared settings. */
+  readonly settings?: Readonly<SharedConfigurationSettings>;
+  /** Dependency constraints — skip if unmet. */
+  readonly dependencyConstraints?: DependencyConstraint;
+  /** Display name shown by the test runner. */
+  readonly name?: string;
+  /** Run only this case (exclusive). */
+  readonly only?: boolean;
+  /** Skip this case. */
+  readonly skip?: boolean;
+  /** Called before the test runs. */
+  readonly before?: () => void;
+  /** Called after the test runs regardless of result. */
+  readonly after?: () => void;
+}
+```
+
+### `InvalidTestCase`
+
+`InvalidTestCase` extends `ValidTestCase` with:
+
+```ts
+interface InvalidTestCase<MessageIds extends string, Options extends readonly unknown[]>
+  extends ValidTestCase<Options> {
+  /** Expected lint errors. */
+  readonly errors: readonly TestCaseError<MessageIds>[];
+  /**
+   * Expected code after applying autofixes.
+   * Pass `null` to assert that no fix is applied.
+   * Pass a string array to assert multi-pass fixes.
+   */
+  readonly output?: string | string[] | null;
+}
+```
+
+### `TestCaseError`
+
+```ts
+interface TestCaseError<MessageIds extends string> {
+  /** Expected message ID from the rule's meta.messages. */
+  readonly messageId: MessageIds;
+  /** Template data for the message. Recommended alongside messageId. */
+  readonly data?: ReportDescriptorMessageData;
+  /** 1-based line number of the reported location. */
+  readonly line?: number;
+  /** 1-based column number of the reported location. */
+  readonly column?: number;
+  /** 1-based end line of the reported location. */
+  readonly endLine?: number;
+  /** 1-based end column of the reported location. */
+  readonly endColumn?: number;
+  /** Expected suggestions on this error. Pass null to assert no suggestions. */
+  readonly suggestions?: readonly SuggestionOutput<MessageIds>[] | null;
+}
+```
+
+## Testing fixers
+
+Assert the code output after a fixer runs using the `output` field:
+
+```ts
+{
+  code: 'var x = 1;',
+  output: 'const x = 1;',
+  errors: [{ messageId: 'preferConst' }],
+}
+```
+
+Pass `null` to assert that no fix is applied:
+
+```ts
+{
+  code: 'var x = 1;',
+  output: null,
+  errors: [{ messageId: 'preferConst' }],
+}
+```
+
+For rules with multi-pass fixes, pass an array of intermediate outputs. This feature is unique to `@typescript-eslint/rule-tester`:
+
+```ts
+{
+  code: 'var x = require("a");',
+  output: [
+    'let x = require("a");',     // after first pass
+    'import x from "a";',         // after second pass
+  ],
+  errors: [{ messageId: 'useImport' }],
+}
+```
+
+## Testing suggestions
+
+Suggestions are non-automatic fixes that users apply manually. Test them via the `suggestions` field on each expected error:
+
+```ts
+{
+  code: 'const x: any = value;',
+  output: null, // the rule itself doesn't autofix
+  errors: [
+    {
+      messageId: 'preferUnknown',
+      suggestions: [
+        {
+          messageId: 'replaceWithUnknown',
+          output: 'const x: unknown = value;',
+        },
+      ],
+    },
+  ],
+}
+```
+
+Pass `suggestions: null` to assert that no suggestions exist for a given error:
+
+```ts
+errors: [{ messageId: 'noSuggestions', suggestions: null }],
+```
+
+## Dependency constraints
+
+Skip tests that require dependency versions not present in the current environment. This is useful for testing backwards and forwards compatibility across TypeScript or other package versions.
+
+```ts
+export type DependencyConstraint = Readonly<Record<string, VersionConstraint>>;
+
+export type VersionConstraint =
+  | AtLeastVersionConstraint   // e.g. "5.0" → requires >=5.0
+  | SemverVersionConstraint;   // e.g. { range: '~5.0.0' }
+```
+
+Apply constraints at the constructor level (all tests) or per test case:
+
+```ts
+const ruleTester = new RuleTester({
+  dependencyConstraints: {
+    // All tests skip unless typescript >= 5.0
+    typescript: '5.0',
+  },
+});
+
+ruleTester.run('my-rule', rule, {
+  valid: [
+    {
+      code: 'using x = getResource();',
+      // This individual test also requires typescript >= 5.2
+      dependencyConstraints: { typescript: '5.2' },
+    },
+  ],
+  invalid: [],
+});
+```
+
+<Warning>
+  All constraints in a `dependencyConstraints` object must match for a test to run. If any constraint is unmet, the test is skipped — not failed.
+</Warning>
+
+## Framework integration
+
+`RuleTester` relies on globally available test framework hooks. If they are not globally available, you must set the static properties before calling `new RuleTester()`.
+
+<Tip>
+  Always configure static properties **before** constructing your first `RuleTester` instance.
+</Tip>
+
+<Tabs>
+  <Tab title="Jest">
+    Jest provides `afterAll`, `describe`, and `it` as globals, so no extra setup is required.
+
+    ```ts
+    import { RuleTester } from '@typescript-eslint/rule-tester';
+
+    const ruleTester = new RuleTester();
+    ruleTester.run('my-rule', rule, { valid: [], invalid: [] });
+    ```
+  </Tab>
+  <Tab title="Vitest">
+    Configure the static properties in a `setupFiles` script:
+
+    ```ts
+    // vitest.setup.ts
+    import * as vitest from 'vitest';
+    import { RuleTester } from '@typescript-eslint/rule-tester';
+
+    RuleTester.afterAll = vitest.afterAll;
+
+    // Required if you are NOT using Vitest's globals: true option:
+    RuleTester.it = vitest.it;
+    RuleTester.itOnly = vitest.it.only;
+    RuleTester.describe = vitest.describe;
+    ```
+
+    ```ts
+    // vitest.config.ts
+    export default {
+      test: {
+        setupFiles: ['./vitest.setup.ts'],
+      },
+    };
+    ```
+  </Tab>
+  <Tab title="Mocha">
+    Configure the static properties in a `mochaGlobalSetup` fixture:
+
+    ```ts
+    // mocha.setup.ts
+    import * as mocha from 'mocha';
+    import { RuleTester } from '@typescript-eslint/rule-tester';
+
+    RuleTester.afterAll = mocha.after;
+    ```
+  </Tab>
+  <Tab title="Node.js (node:test)">
+    Configure in a preloaded module passed via `--import`:
+
+    ```ts
+    // setup.ts
+    import * as test from 'node:test';
+    import { RuleTester } from '@typescript-eslint/rule-tester';
+
+    RuleTester.afterAll = test.after;
+    RuleTester.describe = test.describe;
+    RuleTester.it = test.it;
+    RuleTester.itOnly = test.it.only;
+    ```
+
+    ```bash
+    node --import ./setup.ts --test
+    ```
+  </Tab>
+</Tabs>
+
+## Static properties
+
+Assign any of the following static properties to integrate with your test runner:
+
+| Property       | Description                                              |
+| -------------- | -------------------------------------------------------- |
+| `afterAll`     | Runs after all tests in the file complete.               |
+| `describe`     | Creates a test group.                                    |
+| `describeSkip` | Skips all tests inside the `describe` block.             |
+| `it`           | Creates an individual test.                              |
+| `itOnly`       | Runs only this test (exclusive mode).                    |
+| `itSkip`       | Skips this individual test.                              |
+
+## `noFormat`
+
+`noFormat` is a tagged template literal helper that disables Prettier formatting for a specific test code string. Use it when the code you want to test would otherwise be reformatted by your editor or CI tooling.
+
+```ts
+import { noFormat, RuleTester } from '@typescript-eslint/rule-tester';
+
+ruleTester.run('my-rule', rule, {
+  valid: [
+    noFormat`const x    =    1;`,
+  ],
+  invalid: [],
+});
+```
+
+## Complete example
+
+The following tests a simple rule that disallows `var` declarations:
+
+```ts
+import { RuleTester } from '@typescript-eslint/rule-tester';
+import { noVar } from '../src/rules/no-var';
+
+const ruleTester = new RuleTester();
+
+ruleTester.run('no-var', noVar, {
+  valid: [
+    'const x = 1;',
+    'let y = 2;',
+    {
+      code: 'const obj = { a: 1 };',
+      options: [{ allowObjectPattern: true }],
+    },
+  ],
+  invalid: [
+    {
+      code: 'var x = 1;',
+      output: 'let x = 1;',
+      errors: [
+        {
+          messageId: 'unexpectedVar',
+          line: 1,
+          column: 1,
+        },
+      ],
+    },
+    {
+      code: 'var a = 1; var b = 2;',
+      output: 'let a = 1; let b = 2;',
+      errors: [
+        { messageId: 'unexpectedVar' },
+        { messageId: 'unexpectedVar' },
+      ],
+    },
+  ],
+});
+```

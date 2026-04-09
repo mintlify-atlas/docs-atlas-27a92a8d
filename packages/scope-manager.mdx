@@ -1,0 +1,276 @@
+---
+title: '@typescript-eslint/scope-manager'
+description: 'A TypeScript-aware scope analyzer that traverses an ESTree AST to model variable and type definitions, references, and scope boundaries — a fork of eslint-scope enhanced for TypeScript.'
+keywords: ['typescript-eslint', 'scope-manager', 'scope analysis', 'variable tracking', 'analyze', 'ScopeManager', 'custom rules']
+---
+
+`@typescript-eslint/scope-manager` is a fork of [`eslint-scope`](https://github.com/eslint/eslint-scope) that adds full support for TypeScript syntax. It traverses an ESTree AST and produces a model of how variables and types are defined, referenced, and scoped throughout the program.
+
+Scope analysis gives you fine-grained insight into a program's structure without the cost of full type information. You can trace how variables flow across closures, find unused declarations, detect shadowed bindings, and understand TypeScript-specific constructs like `namespace`, `enum`, and `type` declarations — all without a TypeScript `Program`.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install --save-dev @typescript-eslint/scope-manager
+```
+
+```bash yarn
+yarn add --dev @typescript-eslint/scope-manager
+```
+
+```bash pnpm
+pnpm add --save-dev @typescript-eslint/scope-manager
+```
+
+</CodeGroup>
+
+## API
+
+### `analyze(tree, options?)`
+
+Traverses the given `TSESTree.Program` and returns a `ScopeManager` containing all discovered scopes, variables, and references.
+
+```ts
+import { analyze } from '@typescript-eslint/scope-manager';
+import { parse } from '@typescript-eslint/typescript-estree';
+
+const ast = parse(`const hello: string = 'world';`, {
+  // scope-manager requires range information on the AST
+  range: true,
+});
+
+const scopeManager = analyze(ast, {
+  sourceType: 'module',
+});
+```
+
+<Warning>
+  The AST **must** be parsed with `range: true`. `analyze` requires range information to build the scope model correctly.
+</Warning>
+
+#### `AnalyzeOptions`
+
+| Option                  | Type                                | Default      | Description                                                                                                                                      |
+| ----------------------- | ----------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `childVisitorKeys`      | `Record<string, string[]> \| null`  | —            | Custom visitor key map for AST traversal. Useful when working with non-standard node types.                                                      |
+| `globalReturn`          | `boolean`                           | `false`      | When `true`, adds a function scope immediately after the global scope (Node.js module wrapping behavior).                                         |
+| `impliedStrict`         | `boolean`                           | `false`      | Treat the entire file as if it were in strict mode.                                                                                              |
+| `jsxPragma`             | `string`                            | `'React'`    | Root identifier used for JSX element creation after transpilation (e.g. `'React'`, `'h'`). Do not use a member expression.                       |
+| `jsxFragmentName`       | `string \| null`                    | `null`       | Root identifier for JSX fragments (e.g. `'Fragment'`). `null` assumes `jsxPragma.Fragment`.                                                      |
+| `lib`                   | `Lib[]`                             | `['esnext']` | TypeScript lib settings. The scope manager automatically declares type variables for built-in lib types (e.g. `Promise`, `Map`).                  |
+| `sourceType`            | `'script' \| 'module'`             | —            | Source type of the code being analyzed.                                                                                                           |
+| `emitDecoratorMetadata` | `boolean`                           | `false`      | Emit `design:type` metadata for decorated declarations, as TypeScript's `emitDecoratorMetadata` compiler option does.                            |
+
+---
+
+## `ScopeManager`
+
+The `ScopeManager` object is the root of the scope analysis result. It provides access to all scopes, the variable declaration map, and the node-to-scope mapping.
+
+```ts
+class ScopeManager {
+  /** All scopes discovered in the program, in traversal order. */
+  readonly scopes: Scope[];
+
+  /** The root (global) scope. */
+  globalScope: GlobalScope | null;
+
+  /** Maps each AST node to the scope(s) it belongs to. */
+  readonly nodeToScope: WeakMap<TSESTree.Node, Scope[]>;
+
+  /** Maps each AST node to the variables declared by it. */
+  readonly declaredVariables: WeakMap<TSESTree.Node, Variable[]>;
+}
+```
+
+---
+
+## Scope types
+
+The scope manager creates a typed scope object for each lexical scope boundary in the program. TypeScript-specific scopes are included in addition to the standard JavaScript ones.
+
+| Scope class                   | `ScopeType`             | When it is created                                    |
+| ----------------------------- | ----------------------- | ----------------------------------------------------- |
+| `GlobalScope`                 | `global`                | Root of every file.                                   |
+| `ModuleScope`                 | `module`                | ES module files.                                      |
+| `FunctionScope`               | `function`              | `function` declarations and expressions.              |
+| `BlockScope`                  | `block`                 | `{}` blocks (e.g. `if`, `while`, bare blocks).        |
+| `ClassScope`                  | `class`                 | `class` declarations and expressions.                 |
+| `ClassFieldInitializerScope`  | `class-field-initializer` | Class field initializer expressions.                |
+| `ClassStaticBlockScope`       | `class-static-block`    | `static {}` class blocks.                             |
+| `ForScope`                    | `for`                   | `for`/`for-of`/`for-in` loop headers.                 |
+| `SwitchScope`                 | `switch`                | `switch` statement bodies.                            |
+| `CatchScope`                  | `catch`                 | `catch` clause binding.                               |
+| `WithScope`                   | `with`                  | `with` statements.                                    |
+| `FunctionExpressionNameScope` | `function-expression-name` | Named function expression name binding.            |
+| `FunctionTypeScope`           | `function-type`         | TypeScript function type signatures.                  |
+| `MappedTypeScope`             | `mapped-type`           | TypeScript mapped types (`{ [K in T]: ... }`).        |
+| `ConditionalTypeScope`        | `conditional-type`      | TypeScript conditional types (`T extends U ? A : B`). |
+| `TypeScope`                   | `type`                  | TypeScript `type` alias declarations.                 |
+| `TSEnumScope`                 | `enum`                  | TypeScript `enum` declarations.                       |
+| `TSModuleScope`               | `tsmodule`              | TypeScript `namespace`/`module` declarations.          |
+
+Each scope exposes:
+
+```ts
+interface ScopeBase {
+  /** The scope type identifier. */
+  type: ScopeType;
+  /** Variables declared in this scope. */
+  variables: Variable[];
+  /** All references to variables made in this scope. */
+  references: Reference[];
+  /** Direct child scopes. */
+  childScopes: Scope[];
+  /** The immediately enclosing parent scope. */
+  upper: Scope | null;
+  /** The AST node that created this scope. */
+  block: TSESTree.Node;
+  /** Whether this scope is in strict mode. */
+  isStrict: boolean;
+}
+```
+
+---
+
+## `Variable` and `Reference`
+
+### `Variable`
+
+Represents a variable or type name declared within a scope.
+
+```ts
+interface Variable {
+  /** The variable name. */
+  name: string;
+  /** Definition records for this variable (there may be multiple for var). */
+  defs: Definition[];
+  /** All references to this variable across the program. */
+  references: Reference[];
+  /** The scope in which the variable is declared. */
+  scope: Scope;
+}
+```
+
+### `Reference`
+
+Represents a use of a variable name.
+
+```ts
+class Reference {
+  /** The identifier node at the point of reference. */
+  readonly identifier: TSESTree.Identifier;
+  /** Whether this reference is a read, write, or read-write. */
+  readonly isRead(): boolean;
+  readonly isWrite(): boolean;
+  /** The variable being referenced, or null if unresolved. */
+  readonly resolved: Variable | null;
+  /** The scope from which the reference was made. */
+  readonly from: Scope;
+}
+```
+
+---
+
+## Integration with ESLint rules
+
+Inside an ESLint rule, you access the scope manager through `context.sourceCode.scopeManager` (ESLint 8+) or via `context.getScope()`:
+
+```ts
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+const createRule = ESLintUtils.RuleCreator(name => `https://example.com/${name}`);
+
+export const noUnusedVars = createRule({
+  name: 'no-unused-vars',
+  meta: {
+    type: 'problem',
+    docs: { description: 'Disallow unused variables.' },
+    messages: { unused: "'{{name}}' is declared but never used." },
+    schema: [],
+  },
+  defaultOptions: [],
+  create(context) {
+    return {
+      'Program:exit'() {
+        const scope = context.sourceCode.getScope(context.sourceCode.ast);
+
+        for (const variable of scope.variables) {
+          const isUsed = variable.references.some(ref => ref.isRead());
+          if (!isUsed && variable.defs.length > 0) {
+            const def = variable.defs[0];
+            context.report({
+              node: def.name,
+              messageId: 'unused',
+              data: { name: variable.name },
+            });
+          }
+        }
+      },
+    };
+  },
+});
+```
+
+---
+
+## Standalone usage
+
+You can also use the scope manager outside of ESLint for custom static analysis tooling:
+
+```ts
+import { analyze } from '@typescript-eslint/scope-manager';
+import { parse } from '@typescript-eslint/typescript-estree';
+
+const code = `
+import { useState } from 'react';
+
+function Counter() {
+  const [count, setCount] = useState(0);
+  return count;
+}
+`;
+
+const ast = parse(code, { range: true });
+const scopeManager = analyze(ast, { sourceType: 'module' });
+
+// Find the global scope
+const globalScope = scopeManager.globalScope!;
+console.log('Global scope variables:', globalScope.variables.map(v => v.name));
+
+// Walk all scopes
+for (const scope of scopeManager.scopes) {
+  console.log(`${scope.type} scope: ${scope.variables.length} variable(s)`);
+  for (const variable of scope.variables) {
+    const unresolved = variable.references.filter(r => r.resolved == null);
+    if (unresolved.length > 0) {
+      console.log(`  Unresolved references for "${variable.name}":`, unresolved.length);
+    }
+  }
+}
+```
+
+## Definition types
+
+Each `Variable.defs` entry describes how the variable was introduced:
+
+| Definition class      | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| `CatchClauseDefinition` | Catch clause binding (`catch (e)`)               |
+| `ClassNameDefinition`   | `class Foo` — the class name itself              |
+| `FunctionNameDefinition`| `function foo()` — the function name itself      |
+| `ImplicitGlobalVariableDefinition` | Variables implicitly created by the engine|
+| `ImportBindingDefinition` | `import foo from '...'`                        |
+| `ParameterDefinition`   | Function parameter                               |
+| `TSEnumMemberDefinition`| TypeScript enum member                           |
+| `TSEnumNameDefinition`  | TypeScript enum name                             |
+| `TSModuleNameDefinition`| TypeScript `namespace`/`module` name             |
+| `TypeDefinition`        | TypeScript `type` alias                          |
+| `VariableDefinition`    | `var`/`let`/`const` binding                      |
+
+## References
+
+- [ESLint scope manager interface](https://eslint.org/docs/developer-guide/scope-manager-interface) — the upstream interface this package implements
+- [eslint-scope](https://github.com/eslint/eslint-scope) — the original package this forks

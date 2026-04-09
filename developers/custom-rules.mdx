@@ -1,0 +1,550 @@
+---
+title: 'Building custom rules'
+description: 'A comprehensive guide to writing custom ESLint rules with typescript-eslint, including type-aware rules that use the TypeScript type checker.'
+keywords: ['custom rules', 'ESLint', 'typescript-eslint', 'RuleCreator', 'type-aware', 'rule-tester']
+---
+
+Custom ESLint rules work the same way for JavaScript and TypeScript when you use `@typescript-eslint/parser`. The four main areas where typescript-eslint extends the standard ESLint rule authoring experience are:
+
+- **Utils package** — `@typescript-eslint/utils` replaces `eslint` imports and adds TypeScript-aware types
+- **AST extensions** — TypeScript-specific syntax nodes you can target in selectors
+- **Typed rules** — access to TypeScript's type checker inside rule logic
+- **Testing** — `@typescript-eslint/rule-tester`'s `RuleTester` instead of ESLint core's
+
+<Note>
+You should be familiar with [ESLint's developer guide](https://eslint.org/docs/developer-guide) before writing custom rules. See [AST extensions](/developers/ast-extensions) for background on TypeScript-specific AST nodes.
+</Note>
+
+## Prerequisites
+
+Install the required packages before writing a custom rule:
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install --save-dev @typescript-eslint/utils @typescript-eslint/rule-tester
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add -D @typescript-eslint/utils @typescript-eslint/rule-tester
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add -D @typescript-eslint/utils @typescript-eslint/rule-tester
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+Do not import from the `eslint` package directly when writing TypeScript rules. `@types/eslint` is based on `@types/estree` and does not recognize typescript-eslint nodes and properties. Use `@typescript-eslint/utils` instead.
+</Warning>
+
+## When to write a custom rule
+
+Custom rules are the right tool when you want to:
+
+- Enforce project- or team-specific coding conventions that no published rule covers
+- Lint against internal APIs or patterns unique to your codebase
+- Build a reusable ESLint plugin for distribution
+
+For simpler cases — banning specific imports or requiring certain patterns — consider whether a general-purpose rule such as `no-restricted-imports` or `no-restricted-syntax` already covers your needs.
+
+## Using `RuleCreator`
+
+The recommended way to create custom rules is with `ESLintUtils.RuleCreator` from `@typescript-eslint/utils`. Pass it a function that converts a rule name into a documentation URL, and it returns a typed rule factory.
+
+```typescript
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+const createRule = ESLintUtils.RuleCreator(
+  name => `https://example.com/rules/${name}`,
+);
+```
+
+Use `createRule` to define your rule. The factory infers allowed message IDs from `meta.messages`, giving you type-safe calls to `context.report`:
+
+```typescript
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+const createRule = ESLintUtils.RuleCreator(
+  name => `https://example.com/rules/${name}`,
+);
+
+// Type: RuleModule<"uppercase", ...>
+export const rule = createRule({
+  name: 'uppercase-first-declarations',
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description:
+        'Function declaration names should start with an upper-case letter.',
+    },
+    messages: {
+      uppercase: 'Start this name with an upper-case letter.',
+    },
+    schema: [],
+  },
+  defaultOptions: [],
+  create(context) {
+    return {
+      FunctionDeclaration(node) {
+        if (node.id != null && /^[a-z]/.test(node.id.name)) {
+          context.report({
+            messageId: 'uppercase',
+            node: node.id,
+          });
+        }
+      },
+    };
+  },
+});
+```
+
+### Rule structure
+
+Every rule has three required top-level properties:
+
+| Property | Description |
+|---|---|
+| `name` | The rule's identifier (used in the URL creator) |
+| `meta` | Metadata: type, docs, messages, schema, and default options |
+| `create` | Factory function that returns a map of AST visitor functions |
+
+### Generics: `Options` and `MessageIds`
+
+`RuleModule` accepts two generics. Declare them explicitly when you need multiple message IDs or configurable options:
+
+```typescript
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+type MessageIds = 'lowercase' | 'uppercase';
+
+type Options = [
+  {
+    preferredCase?: 'lower' | 'upper';
+  },
+];
+
+// Type: RuleModule<MessageIds, Options, ...>
+export const rule = createRule<Options, MessageIds>({
+  // ...
+});
+```
+
+### Extra rule docs types
+
+You can extend `meta.docs` with additional plugin-specific properties by passing a type argument to `ESLintUtils.RuleCreator`:
+
+```typescript
+interface MyPluginDocs {
+  recommended: boolean;
+}
+
+const createRule = ESLintUtils.RuleCreator<MyPluginDocs>(
+  name => `https://example.com/rules/${name}`,
+);
+
+createRule({
+  // ...
+  meta: {
+    docs: {
+      description: 'Enforce something important.',
+      recommended: true,
+    },
+    // ...
+  },
+});
+```
+
+### Rules without documentation
+
+If you do not want to provide a documentation URL, use `ESLintUtils.RuleCreator.withoutDocs`. This applies the same type inference without requiring a URL function.
+
+```typescript
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+export const rule = ESLintUtils.RuleCreator.withoutDocs({
+  create(context) {
+    // ...
+  },
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'A rule without a documentation URL.',
+    },
+    messages: {
+      myMessage: 'Something is wrong here.',
+    },
+    schema: [],
+  },
+});
+```
+
+<Tip>
+Include a descriptive error message and a link to documentation in every custom rule. It significantly improves the developer experience for rule consumers.
+</Tip>
+
+## Handling rule options
+
+Rules can accept user-configurable options. Declare them in three places:
+
+1. The `Options` generic type
+2. `meta.schema` — a JSON Schema describing the options shape
+3. `defaultOptions` — the default values applied when options are omitted
+
+```typescript
+type MessageIds = 'lowercase' | 'uppercase';
+
+type Options = [
+  {
+    preferredCase: 'lower' | 'upper';
+  },
+];
+
+export const rule = createRule<Options, MessageIds>({
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'Enforce a naming case preference.',
+    },
+    messages: {
+      lowercase: 'Use a lower-case name.',
+      uppercase: 'Use an upper-case name.',
+    },
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          preferredCase: {
+            type: 'string',
+            enum: ['lower', 'upper'],
+          },
+        },
+        additionalProperties: false,
+      },
+    ],
+  },
+  defaultOptions: [
+    {
+      preferredCase: 'lower',
+    },
+  ],
+  create(context, options) {
+    if (options[0].preferredCase === 'lower') {
+      // enforce lower-case
+    }
+  },
+});
+```
+
+<Warning>
+Read options from the second parameter of `create` (`options`), not from `context.options`. The `context.options` value is set by ESLint before defaults are applied, so it may be incomplete.
+</Warning>
+
+## Targeting TypeScript-specific AST nodes
+
+`@typescript-eslint/estree` adds AST nodes for TypeScript syntax. These nodes follow the naming convention `TS*` — for example, `TSInterfaceDeclaration` and `TSTypeAnnotation`. Use them as visitor keys in your rule's `create` return object just like any other AST node.
+
+```typescript
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+export const rule = createRule({
+  name: 'uppercase-first-interfaces',
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description:
+        'Interface declaration names should start with an upper-case letter.',
+    },
+    messages: {
+      uppercase: 'Start this name with an upper-case letter.',
+    },
+    schema: [],
+  },
+  defaultOptions: [],
+  create(context) {
+    return {
+      TSInterfaceDeclaration(node) {
+        if (/^[a-z]/.test(node.id.name)) {
+          context.report({
+            messageId: 'uppercase',
+            node: node.id,
+          });
+        }
+      },
+    };
+  },
+});
+```
+
+### Node types and the `TSESTree` namespace
+
+TypeScript types for AST nodes live in the `TSESTree` namespace from `@typescript-eslint/utils`. Use them to annotate `node` parameters and narrow types with the `AST_NODE_TYPES` enum:
+
+```typescript
+import { AST_NODE_TYPES, TSESTree } from '@typescript-eslint/utils';
+
+export function describeNode(node: TSESTree.Node): string {
+  switch (node.type) {
+    case AST_NODE_TYPES.ArrayExpression:
+      return `Array containing ${node.elements.map(describeNode).join(', ')}`;
+
+    case AST_NODE_TYPES.Literal:
+      return `Literal value ${node.raw}`;
+
+    default:
+      return '(unknown)';
+  }
+}
+```
+
+When your selector targets multiple node types, add an explicit type union annotation:
+
+```typescript
+import { TSESTree } from '@typescript-eslint/utils';
+
+export const rule = createRule({
+  // ...
+  create(context) {
+    return {
+      'FunctionDeclaration, TSInterfaceDeclaration'(
+        node: TSESTree.FunctionDeclaration | TSESTree.TSInterfaceDeclaration,
+      ) {
+        if (node.id != null && /^[a-z]/.test(node.id.name)) {
+          context.report({
+            messageId: 'uppercase',
+            node: node.id,
+          });
+        }
+      },
+    };
+  },
+});
+```
+
+See [AST extensions](/developers/ast-extensions) for a full list of TypeScript-specific node types.
+
+## Type-aware rules
+
+The most powerful feature of typescript-eslint is access to TypeScript's type checker APIs inside rule logic. Use `ESLintUtils.getParserServices` to retrieve the parser services object from a rule context.
+
+```typescript
+import { ESLintUtils } from '@typescript-eslint/utils';
+import * as ts from 'typescript';
+
+export const rule = createRule({
+  name: 'no-loop-over-enum',
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'Avoid looping over enums.',
+    },
+    messages: {
+      loopOverEnum: 'Do not loop over enums.',
+    },
+    schema: [],
+  },
+  defaultOptions: [],
+  create(context) {
+    return {
+      ForOfStatement(node) {
+        // 1. Grab the parser services for the rule
+        const services = ESLintUtils.getParserServices(context);
+
+        // 2. Find the TypeScript type for the ESTree node
+        const type = services.getTypeAtLocation(node.right);
+
+        // 3. Check the TypeScript type's backing symbol for being an enum
+        if (type.symbol?.flags & ts.SymbolFlags.Enum) {
+          context.report({
+            messageId: 'loopOverEnum',
+            node: node.right,
+          });
+        }
+      },
+    };
+  },
+});
+```
+
+### What `getParserServices` returns
+
+The `services` object contains:
+
+| Property | Description |
+|---|---|
+| `program` | A full `ts.Program` if type checking is enabled, or `null` |
+| `esTreeNodeToTSNodeMap` | Map from `TSESTree.Node` to the corresponding `ts.Node` |
+| `tsNodeToESTreeNodeMap` | Map from `ts.Node` to the corresponding `TSESTree.Node` |
+| `getTypeAtLocation` | Wraps the type checker, accepts a `TSESTree.Node` |
+| `getSymbolAtLocation` | Wraps the type checker, accepts a `TSESTree.Node` |
+
+When you need TypeScript APIs not wrapped by the parser services, access the full type checker directly:
+
+```typescript
+const services = ESLintUtils.getParserServices(context);
+const checker = services.program.getTypeChecker();
+```
+
+<Note>
+`getTypeAtLocation` and `getSymbolAtLocation` are only available when type checking is enabled. `getParserServices` will throw an informative error if the rule requires type information but the user has not configured `parserOptions.project` or `parserOptions.projectService`.
+</Note>
+
+### Avoiding conditional type logic
+
+We recommend against changing rule behavior based solely on whether `services.program` exists. Users are often surprised when a rule behaves differently with and without type information, and misconfiguration can silently change rule behavior.
+
+Instead, either:
+- Gate type-checking behind an explicit rule option
+- Create two separate rule variants (one typed, one untyped)
+
+## Testing
+
+`@typescript-eslint/rule-tester` exports a `RuleTester` with an API similar to ESLint's built-in tester, but with full TypeScript support.
+
+### Testing rules without type information
+
+For rules that do not use the type checker, no constructor arguments are needed:
+
+```typescript
+import { RuleTester } from '@typescript-eslint/rule-tester';
+import rule from './my-rule';
+
+const ruleTester = new RuleTester();
+
+ruleTester.run('my-rule', rule, {
+  valid: [
+    { code: 'function MyComponent() {}' },
+  ],
+  invalid: [
+    {
+      code: 'function myComponent() {}',
+      errors: [{ messageId: 'uppercase' }],
+    },
+  ],
+});
+```
+
+### Testing type-aware rules
+
+For rules that use `getParserServices`, pass `parserOptions` with `projectService` enabled:
+
+```typescript
+import { RuleTester } from '@typescript-eslint/rule-tester';
+import rule from './my-typed-rule';
+
+const ruleTester = new RuleTester({
+  languageOptions: {
+    parserOptions: {
+      projectService: {
+        allowDefaultProject: ['*.ts*'],
+      },
+      tsconfigRootDir: __dirname,
+    },
+  },
+});
+
+ruleTester.run('my-typed-rule', rule, {
+  valid: [
+    { code: 'const x = [1, 2, 3]; for (const n of x) {}' },
+  ],
+  invalid: [
+    {
+      code: 'enum Direction { Up, Down } for (const d of Direction) {}',
+      errors: [{ messageId: 'loopOverEnum' }],
+    },
+  ],
+});
+```
+
+<Tip>
+To run a single test case while debugging, add `only: true` to the test object. Remember to remove it before opening a pull request — the `eslint-plugin/no-only-tests` rule will flag it.
+</Tip>
+
+## Full working example
+
+Below is a complete type-aware rule that bans `for...of` loops over TypeScript enums.
+
+<CodeGroup>
+
+```typescript no-loop-over-enum.ts
+import { ESLintUtils } from '@typescript-eslint/utils';
+import * as ts from 'typescript';
+
+const createRule = ESLintUtils.RuleCreator(
+  name => `https://example.com/rules/${name}`,
+);
+
+export const rule = createRule({
+  name: 'no-loop-over-enum',
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'Avoid looping over enums.',
+    },
+    messages: {
+      loopOverEnum: 'Do not loop over enums.',
+    },
+    schema: [],
+  },
+  defaultOptions: [],
+  create(context) {
+    return {
+      ForOfStatement(node) {
+        const services = ESLintUtils.getParserServices(context);
+        const type = services.getTypeAtLocation(node.right);
+
+        if (type.symbol?.flags & ts.SymbolFlags.Enum) {
+          context.report({
+            messageId: 'loopOverEnum',
+            node: node.right,
+          });
+        }
+      },
+    };
+  },
+});
+```
+
+```typescript no-loop-over-enum.test.ts
+import { RuleTester } from '@typescript-eslint/rule-tester';
+import { rule } from './no-loop-over-enum';
+
+const ruleTester = new RuleTester({
+  languageOptions: {
+    parserOptions: {
+      projectService: {
+        allowDefaultProject: ['*.ts*'],
+      },
+      tsconfigRootDir: __dirname,
+    },
+  },
+});
+
+ruleTester.run('no-loop-over-enum', rule, {
+  valid: [
+    { code: 'const arr = [1, 2, 3]; for (const n of arr) {}' },
+  ],
+  invalid: [
+    {
+      code: 'enum Direction { Up, Down } for (const d of Direction) {}',
+      errors: [{ messageId: 'loopOverEnum' }],
+    },
+  ],
+});
+```
+
+</CodeGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="AST extensions" icon="code" href="/developers/ast-extensions">
+    Explore the full set of TypeScript-specific AST nodes you can target.
+  </Card>
+  <Card title="ESLint plugins" icon="plug" href="/developers/eslint-plugins">
+    Bundle custom rules into a distributable ESLint plugin.
+  </Card>
+</CardGroup>

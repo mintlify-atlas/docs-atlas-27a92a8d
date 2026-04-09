@@ -1,0 +1,252 @@
+---
+title: '@typescript-eslint/typescript-estree'
+description: 'The TypeScript parser that converts TypeScript source code into an ESTree-compatible AST. Powers @typescript-eslint/parser, Prettier, and any tool that needs to parse TypeScript.'
+keywords: ['typescript-eslint', 'typescript-estree', 'parse', 'parseAndGenerateServices', 'AST', 'ESTree', 'TypeScript parser']
+---
+
+`@typescript-eslint/typescript-estree` is the low-level TypeScript parser that converts TypeScript source code into an [ESTree](https://github.com/estree/estree)-compatible Abstract Syntax Tree (AST). It is the engine behind `@typescript-eslint/parser` and is also used by [Prettier](https://prettier.io) for TypeScript formatting.
+
+The parser works in two steps:
+
+1. Invokes the TypeScript compiler on the given source code to produce a TypeScript AST.
+2. Converts the TypeScript AST into an ESTree-compatible AST, with additional TypeScript-specific node types.
+
+## When to use this directly
+
+Most projects should use `@typescript-eslint/parser` (through `typescript-eslint`) rather than this package directly. Use `@typescript-eslint/typescript-estree` when you need to:
+
+- Parse TypeScript outside of ESLint (e.g. in a code transform, custom tool, or script)
+- Access both the ESTree AST and TypeScript's type checker in a non-ESLint context
+- Build tooling that wraps or extends the parser
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install --save-dev @typescript-eslint/typescript-estree
+```
+
+```bash yarn
+yarn add --dev @typescript-eslint/typescript-estree
+```
+
+```bash pnpm
+pnpm add --save-dev @typescript-eslint/typescript-estree
+```
+
+</CodeGroup>
+
+## API
+
+### `parse(code, options?)`
+
+Parses TypeScript (or JavaScript) source code and returns an ESTree-compatible AST. Does not generate type information.
+
+```ts
+declare function parse(
+  code: string,
+  options?: ParseOptions,
+): TSESTree.Program;
+```
+
+```ts
+import { parse } from '@typescript-eslint/typescript-estree';
+
+const ast = parse(`const hello: string = 'world';`, {
+  loc: true,
+  range: true,
+});
+```
+
+#### `ParseOptions`
+
+| Option                              | Type                                                  | Default          | Description                                                                                                              |
+| ----------------------------------- | ----------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `allowInvalidAST`                   | `boolean`                                             | `false`          | Prevents throwing when TypeScript returns an invalid AST. Typically only occurs when linting genuinely invalid code.     |
+| `comment`                           | `boolean`                                             | `false`          | Include a top-level `comments` array with all comments from the file.                                                   |
+| `debugLevel`                        | `boolean \| ('typescript-eslint' \| 'eslint' \| 'typescript')[]` | `false` | Enables debug logging. `true` is shorthand for `['typescript-eslint']`.                                    |
+| `errorOnUnknownASTType`             | `boolean`                                             | `false`          | Throw when encountering an unknown AST node type. Useful for testing against new TypeScript releases.                    |
+| `filePath`                          | `string`                                              | `'estree.ts'`    | Absolute or relative path to the file being parsed. Affects extension-based behavior (e.g. TSX).                         |
+| `jsDocParsingMode`                  | `'all' \| 'none' \| 'type-info'`                     | `'all'`          | Controls JSDoc parsing. Set to `'none'` for a performance boost if you do not use JSDoc.                                |
+| `jsx`                               | `boolean`                                             | `false`          | Enable JSX parsing. Has no effect on known extensions (`.tsx`, `.jsx`, etc.).                                            |
+| `loc`                               | `boolean`                                             | `false`          | Add `loc` objects (line/column) to every AST node.                                                                       |
+| `loggerFn`                          | `Function \| false`                                   | `console.log`    | Override the logging function, or pass `false` to disable logging.                                                       |
+| `range`                             | `boolean`                                             | `false`          | Add `range` arrays ([start, end] byte offsets) to every AST node.                                                        |
+| `suppressDeprecatedPropertyWarnings`| `boolean`                                             | `false`          | Suppress `console.warn` calls when accessing deprecated AST properties.                                                  |
+| `tokens`                            | `boolean`                                             | `false`          | Add a top-level `tokens` array with all tokens from the file.                                                            |
+
+---
+
+### `parseAndGenerateServices(code, options?)`
+
+Parses TypeScript source code and returns an ESTree AST **plus** `ParserServices` — the bidirectional AST maps and the TypeScript `Program` needed for type-aware operations.
+
+```ts
+declare function parseAndGenerateServices(
+  code: string,
+  options?: ParseAndGenerateServicesOptions,
+): ParseAndGenerateServicesResult;
+```
+
+```ts
+import { parseAndGenerateServices } from '@typescript-eslint/typescript-estree';
+
+const { ast, services } = parseAndGenerateServices(
+  `const hello: string = 'world';`,
+  {
+    filePath: '/path/to/file.ts',
+    loc: true,
+    range: true,
+    project: './tsconfig.json',
+    tsconfigRootDir: process.cwd(),
+  },
+);
+
+const checker = services.program.getTypeChecker();
+const tsNode = services.esTreeNodeToTSNodeMap.get(ast.body[0]);
+const type = checker.getTypeAtLocation(tsNode);
+```
+
+#### `ParseAndGenerateServicesOptions`
+
+Extends all `ParseOptions` fields, plus:
+
+| Option                                | Type                                | Default                | Description                                                                                                                     |
+| ------------------------------------- | ----------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `project`                             | `string \| string[] \| boolean \| null` | `undefined`       | Path(s) to `tsconfig.json`. Required for type information. `projectService` is now preferred.                                   |
+| `projectService`                      | `boolean \| ProjectServiceOptions`  | `undefined`            | Use a shared TypeScript project service for program creation. Preferred over `project`.                                         |
+| `tsconfigRootDir`                     | `string`                            | `process.cwd()`        | Absolute root directory for resolving `project` paths.                                                                          |
+| `extraFileExtensions`                 | `string[]`                          | `[]`                   | Additional file extensions to parse (e.g. `['.vue']`).                                                                          |
+| `preserveNodeMaps`                    | `boolean`                           | `false` (or `true` when `project` is set) | Keep two-way AST node maps on the returned `parserServices`.                                              |
+| `programs`                            | `ts.Program[]`                      | —                      | Provide TypeScript `Program` instances directly, bypassing `project`/`projectService`.                                           |
+| `disallowAutomaticSingleRunInference` | `boolean`                           | `false`                | Disable the automatic single-run performance optimization. Set via `TSESTREE_SINGLE_RUN` env var.                               |
+| `errorOnTypeScriptSyntacticAndSemanticIssues` | `boolean`                  | `false`                | Throw if TypeScript reports syntax or semantic errors.                                                                           |
+| `projectFolderIgnoreList`             | `string[]`                          | `['/node_modules/']`   | Globs to ignore when resolving `project` values.                                                                                 |
+| `cacheLifetime`                       | `{ glob?: number \| 'Infinity' }`   | 30 seconds             | Controls how long internal glob resolution caches are retained.                                                                  |
+
+#### `ProjectServiceOptions`
+
+```ts
+interface ProjectServiceOptions {
+  /** Globs of files to allow with the default compiler options. */
+  allowDefaultProject?: string[];
+  /** Path to a TSConfig to use as the default project. Defaults to 'tsconfig.json'. */
+  defaultProject?: string;
+  /** Load TypeScript plugins from the TSConfig. */
+  loadTypeScriptPlugins?: boolean;
+  /**
+   * Max files matched by allowDefaultProject.
+   * Each match slows linting. Default: 8.
+   */
+  maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING?: number;
+}
+```
+
+#### `ParseAndGenerateServicesResult`
+
+```ts
+interface ParseAndGenerateServicesResult<T extends TSESTreeOptions> {
+  ast: TSESTree.Program;
+  services: ParserServices;
+}
+
+interface ParserServices {
+  program: ts.Program;
+  esTreeNodeToTSNodeMap: WeakMap<TSESTree.Node, ts.Node | ts.Token>;
+  tsNodeToESTreeNodeMap: WeakMap<ts.Node | ts.Token, TSESTree.Node>;
+}
+```
+
+---
+
+### `createProgram(configFile, projectDirectory?)`
+
+A utility that creates a TypeScript `Program` from a `tsconfig.json` file. Use this with the `programs` option when you want fine-grained control over program creation.
+
+```ts
+declare function createProgram(
+  configFile: string,
+  projectDirectory?: string,
+): ts.Program;
+```
+
+```ts
+import { createProgram, parseAndGenerateServices } from '@typescript-eslint/typescript-estree';
+
+const program = createProgram('tsconfig.json');
+const { ast, services } = parseAndGenerateServices(`const x: string = 'y';`, {
+  filePath: '/src/index.ts',
+  loc: true,
+  range: true,
+  programs: [program],
+});
+```
+
+---
+
+### `simpleTraverse(node, options)`
+
+Traverses an ESTree AST without a full visitor infrastructure. Useful for simple one-off traversals.
+
+```ts
+import { parse, simpleTraverse } from '@typescript-eslint/typescript-estree';
+
+const ast = parse('const x = 1;', { range: true });
+
+simpleTraverse(ast, {
+  enter(node) {
+    console.log(node.type);
+  },
+});
+```
+
+---
+
+### `TSESTree`, `AST_NODE_TYPES`, `AST_TOKEN_TYPES`
+
+The TypeScript-extended ESTree types and enums are exported directly:
+
+- **`TSESTree`** — namespace containing all AST node object types.
+- **`AST_NODE_TYPES`** — enum of every node `type` string.
+- **`AST_TOKEN_TYPES`** — enum of every token `type` string.
+
+```ts
+import { AST_NODE_TYPES, type TSESTree } from '@typescript-eslint/typescript-estree';
+
+function isIdentifier(node: TSESTree.Node): node is TSESTree.Identifier {
+  return node.type === AST_NODE_TYPES.Identifier;
+}
+```
+
+---
+
+## Debugging
+
+Enable debug logging by setting the `DEBUG` environment variable:
+
+```bash
+# All typescript-eslint debug output
+DEBUG=typescript-eslint:* eslint .
+
+# Exclude TypeScript server logs
+DEBUG='typescript-eslint:*,-typescript-eslint:typescript-estree:tsserver:*' eslint .
+```
+
+You can also pass the `debugLevel` option to `parse()` or `parseAndGenerateServices()`:
+
+```ts
+parse(code, { debugLevel: ['typescript-eslint', 'typescript'] });
+```
+
+## Other exports
+
+| Export                        | Description                                                                          |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| `clearCaches`                 | Clears internal caches for glob resolution and program creation.                     |
+| `withoutProjectParserOptions` | Returns a copy of `ParseAndGenerateServicesOptions` with project-related fields removed. |
+| `getScriptKind`               | Returns the TypeScript `ScriptKind` for a given file path.                           |
+| `getCanonicalFileName`        | Returns a normalized, canonical file path string.                                    |
+| `TSError`                     | Error class thrown when TypeScript reports parse errors.                              |
+| `typescriptVersionIsAtLeast`  | Checks whether the bundled TypeScript version meets a minimum requirement.            |
+| `version`                     | The current package version string.                                                  |

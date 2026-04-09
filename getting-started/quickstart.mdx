@@ -1,0 +1,126 @@
+---
+title: 'Quickstart'
+description: 'Get ESLint running on your TypeScript code in minutes using the recommended flat config format.'
+keywords: ['typescript-eslint', 'quickstart', 'eslint', 'flat config', 'setup', 'installation']
+---
+
+This guide uses [ESLint's flat config format](https://eslint.org/docs/latest/use/configure/configuration-files) — the current recommended approach as of ESLint v9.
+
+<Note>
+  Looking for a different setup?
+
+  - For the legacy `.eslintrc.*` format — see [Legacy ESLint Setup](/getting-started/legacy-eslint-setup).
+  - For rules that use TypeScript's type checker — see [Typed Linting](/getting-started/typed-linting).
+</Note>
+
+<Steps>
+  <Step title="Install packages">
+    Install [ESLint](https://eslint.org), [TypeScript](https://typescriptlang.org), and the [`typescript-eslint`](https://www.npmjs.com/package/typescript-eslint) package:
+
+    <CodeGroup>
+
+    ```bash npm
+    npm install --save-dev eslint @eslint/js typescript typescript-eslint
+    ```
+
+    ```bash yarn
+    yarn add --dev eslint @eslint/js typescript typescript-eslint
+    ```
+
+    ```bash pnpm
+    pnpm add --save-dev eslint @eslint/js typescript typescript-eslint
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Create your ESLint config">
+    Create an `eslint.config.mjs` file in the root of your project:
+
+    ```js eslint.config.mjs
+    // @ts-check
+
+    import js from '@eslint/js';
+    import { defineConfig } from 'eslint/config';
+    import tseslint from 'typescript-eslint';
+
+    export default defineConfig(
+      js.configs.recommended,
+      tseslint.configs.recommended,
+    );
+    ```
+
+    This enables the [`recommended` shared configuration](/configuration/shared-configs#recommended) for TypeScript linting.
+
+    **What each part does:**
+
+    - `defineConfig(...)` — An optional ESLint helper that provides editor autocomplete and type checking on your config. See [ESLint's configuration docs](https://eslint.org/docs/latest/use/configure/configuration-files) for details.
+    - `js.configs.recommended` — Turns on [ESLint's recommended rules](https://www.npmjs.com/package/@eslint/js) for general JavaScript best practices.
+    - `tseslint.configs.recommended` — Turns on [typescript-eslint's recommended rules](/configuration/shared-configs#recommended) for TypeScript-specific correctness.
+
+    <Note>
+      The `.mjs` extension tells Node.js to treat the file as an ES module. If your `package.json` has `"type": "module"`, you can use `eslint.config.js` instead.
+    </Note>
+  </Step>
+
+  <Step title="Run ESLint">
+    Open a terminal at the root of your project and run:
+
+    <CodeGroup>
+
+    ```bash npm
+    npx eslint .
+    ```
+
+    ```bash yarn
+    yarn eslint .
+    ```
+
+    ```bash pnpm
+    pnpm eslint .
+    ```
+
+    </CodeGroup>
+
+    ESLint will lint all TypeScript-compatible files in the current directory and print results to your terminal.
+  </Step>
+</Steps>
+
+## Next steps
+
+### Stricter rule sets
+
+Consider enabling these additional shared configurations for a stronger baseline:
+
+- **`strict`** — A superset of `recommended` with more opinionated rules that can also catch bugs.
+- **`stylistic`** — Additional rules that enforce consistent code style without changing logic.
+
+```js eslint.config.mjs
+export default defineConfig(
+  js.configs.recommended,
+  // Remove this line
+  tseslint.configs.recommended,
+  // Add these lines
+  tseslint.configs.strict,
+  tseslint.configs.stylistic,
+);
+```
+
+Read more in the [shared configurations docs](/configuration/shared-configs).
+
+### Typed linting
+
+typescript-eslint provides additional rules that use TypeScript's type checker to catch bugs invisible to syntax-only analysis — things like unhandled promises, unsafe member access, and type narrowing issues.
+
+<CardGroup cols={2}>
+  <Card title="Enable typed linting" icon="shield-check" href="/getting-started/typed-linting">
+    Add type-aware rules for deeper analysis of your TypeScript code.
+  </Card>
+  <Card title="Shared configurations" icon="layers" href="/configuration/shared-configs">
+    Browse all available rule sets and pick the right level for your project.
+  </Card>
+</CardGroup>
+
+### Troubleshooting
+
+If you run into issues, see our [Troubleshooting & FAQs](/troubleshooting/faqs).

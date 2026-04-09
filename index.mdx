@@ -1,97 +1,101 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "typescript-eslint"
+description: "Powerful static analysis for TypeScript — the tooling that enables ESLint to support TypeScript with 100+ rules, type-aware linting, and shared configurations."
 ---
 
-## Setting up
+typescript-eslint is the industry-standard toolchain for linting TypeScript code with ESLint. It provides a custom parser, a rich plugin with over 100 TypeScript-specific rules, and ready-made shared configurations so you can enforce code quality and consistency across any TypeScript project.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/getting-started/quickstart">
+    Set up typescript-eslint in your project in minutes with the recommended configuration.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Typed Linting" icon="shield-check" href="/getting-started/typed-linting">
+    Enable type-aware rules that use TypeScript's type checker for deeper analysis.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Shared Configs" icon="sliders" href="/configuration/shared-configs">
+    Choose from recommended, strict, or stylistic configurations to match your needs.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Rules Reference" icon="list-check" href="/rules/overview">
+    Browse all 100+ rules available in the ESLint plugin.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Why typescript-eslint?
 
-Everything you need to create world-class documentation.
+ESLint's built-in rules only understand JavaScript. typescript-eslint bridges that gap by providing a parser that transforms TypeScript source code into an AST that ESLint can traverse, then adding rules that understand TypeScript-specific syntax and types.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+<CardGroup cols={3}>
+  <Card title="Type-aware rules" icon="magnifying-glass">
+    Rules like `no-floating-promises` and `no-unsafe-assignment` use TypeScript's type checker to catch bugs that syntax-only rules cannot.
   </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
+  <Card title="100+ rules" icon="shield">
+    From naming conventions to unsafe type operations, get comprehensive coverage for TypeScript code quality.
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
+  <Card title="Zero config needed" icon="bolt">
+    Drop in `tseslint.configs.recommended` and get instant value without manual rule configuration.
   </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+</CardGroup>
 
-## Need inspiration?
+## Get started
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Steps>
+  <Step title="Install packages">
+    Install ESLint, TypeScript, and typescript-eslint.
+
+    <CodeGroup>
+    ```bash npm
+    npm install --save-dev eslint typescript typescript-eslint
+    ```
+    ```bash yarn
+    yarn add --dev eslint typescript typescript-eslint
+    ```
+    ```bash pnpm
+    pnpm add --save-dev eslint typescript typescript-eslint
+    ```
+    </CodeGroup>
+  </Step>
+  <Step title="Create your config">
+    Create `eslint.config.mjs` at the root of your project.
+
+    ```js eslint.config.mjs
+    // @ts-check
+    import js from '@eslint/js';
+    import { defineConfig } from 'eslint/config';
+    import tseslint from 'typescript-eslint';
+
+    export default defineConfig(
+      js.configs.recommended,
+      tseslint.configs.recommended,
+    );
+    ```
+  </Step>
+  <Step title="Run ESLint">
+    Lint your TypeScript files.
+
+    ```bash
+    npx eslint .
+    ```
+  </Step>
+  <Step title="Enable typed linting (optional)">
+    For the most powerful rules, enable type-aware linting. See the [Typed Linting guide](/getting-started/typed-linting) for setup details.
+  </Step>
+</Steps>
+
+## Explore packages
+
+typescript-eslint is a monorepo. Most users only need the top-level `typescript-eslint` package, but each sub-package is also available independently.
+
+<CardGroup cols={2}>
+  <Card title="typescript-eslint" icon="box" href="/packages/typescript-eslint">
+    The all-in-one package: parser, plugin, and config helpers in a single import.
+  </Card>
+  <Card title="@typescript-eslint/eslint-plugin" icon="puzzle-piece" href="/packages/eslint-plugin">
+    The ESLint plugin containing all typescript-eslint rules.
+  </Card>
+  <Card title="@typescript-eslint/parser" icon="code" href="/packages/parser">
+    The ESLint parser that understands TypeScript syntax.
+  </Card>
+  <Card title="@typescript-eslint/utils" icon="wrench" href="/packages/utils">
+    Utilities for building custom ESLint rules with TypeScript support.
+  </Card>
+</CardGroup>

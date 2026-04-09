@@ -1,0 +1,157 @@
+---
+title: 'Contributing overview'
+description: 'How to contribute to typescript-eslint — reporting bugs, requesting features, and sending pull requests.'
+keywords: ['contributing', 'open source', 'issues', 'pull requests', 'typescript-eslint']
+---
+
+typescript-eslint is maintained by a small group of volunteers. Contributions of all kinds are welcome.
+
+## Ways to contribute
+
+<CardGroup cols={2}>
+  <Card title="Report a bug" icon="bug" href="https://github.com/typescript-eslint/typescript-eslint/issues/new/choose">
+    Found something that is not working as expected? File an issue with a reproduction.
+  </Card>
+  <Card title="Request a feature" icon="lightbulb" href="https://github.com/typescript-eslint/typescript-eslint/issues/new/choose">
+    Have an idea for a new rule or enhancement? Open a feature request.
+  </Card>
+  <Card title="Send a pull request" icon="code-pull-request" href="https://github.com/typescript-eslint/typescript-eslint/pulls">
+    Fixed a bug or implemented a feature? We welcome pull requests.
+  </Card>
+  <Card title="Improve the docs" icon="book" href="https://github.com/typescript-eslint/typescript-eslint/issues/new/choose">
+    Documentation improvements — including missing pages — are always appreciated.
+  </Card>
+</CardGroup>
+
+## Code of conduct
+
+All contributors are expected to follow the project's [Code of Conduct](https://github.com/typescript-eslint/typescript-eslint/blob/main/CODE_OF_CONDUCT.md). Please read it before participating.
+
+## Reporting bugs
+
+Before opening a bug report:
+
+- Make sure you are on the [latest version](https://github.com/typescript-eslint/typescript-eslint/releases) of all typescript-eslint packages
+- Search [all open and closed issues](https://github.com/typescript-eslint/typescript-eslint/issues?q=is%3Aissue+) to check whether the bug has already been reported
+- Fill out the [bug report template](https://github.com/typescript-eslint/typescript-eslint/issues/new/choose) completely
+
+Provide as much detail as you can — a minimal reproduction is the most valuable thing you can include.
+
+<Note>
+The issue tracker is not the right place for questions or support requests. Use the [Discord server](https://discord.gg/FSxKq8Tdyg) `#help` channel, [StackOverflow](https://stackoverflow.com/questions/tagged/typescript-eslint), or tag [@typescript-eslint.io on Bluesky](https://bsky.app/profile/typescript-eslint.io) instead.
+</Note>
+
+## Requesting features
+
+To request a new rule or other feature:
+
+- Search existing issues first — someone may have already raised the same idea
+- Fill out the [feature request template](https://github.com/typescript-eslint/typescript-eslint/issues/new/choose)
+- Explain the use case clearly, not just the implementation you have in mind
+
+### Community engagement evaluation
+
+For feature requests where the impact is unclear, the maintainers may add an `evaluating community engagement` label and wait 3–6 months before deciding whether to accept or decline the issue. If your issue receives this label:
+
+- Share the issue to find other users who want the same thing
+- Try implementing the feature in a standalone plugin using the [Building ESLint Plugins guide](/developers/eslint-plugins) — this lets the community experiment with it independently
+
+## Filing issues: dos and don'ts
+
+**Do:**
+- Include full, runnable reproduction code
+- Describe the expected and actual behavior
+- List the exact package versions you are using
+
+**Don't:**
+- Leave "+1" or "when will this be fixed?" comments — add a reaction instead
+- Bring up unrelated topics in existing issues — file a new issue
+- Comment on closed PRs — file a new issue and link to the PR for context
+
+### Issue claiming
+
+typescript-eslint does not use an issue claiming system. If an issue is labeled `accepting prs` and no open PR exists, you are welcome to send one — no need to ask for permission first.
+
+## Finding a good first issue
+
+<Steps>
+  <Step title="Good first issues">
+    Start with issues labeled [`good first issue` + `accepting prs`](https://github.com/typescript-eslint/typescript-eslint/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22+label%3A%22accepting+prs%22+-label%3A%22repo+maintenance%22+no%3Aassignee). These are intentionally scoped to be approachable for new contributors.
+  </Step>
+  <Step title="Intermediate issues">
+    After completing a few good-first issues, look at [`accepting prs` without `good first issue`](https://github.com/typescript-eslint/typescript-eslint/issues?q=is%3Aopen+is%3Aissue+label%3A%22accepting+prs%22+-label%3A%22good+first+issue%22+-label%3A%22repo+maintenance%22+no%3Aassignee) for more challenging work.
+  </Step>
+  <Step title="Set up your environment">
+    Follow the [local development guide](/contributing/local-development) to clone, build, and test the repository.
+  </Step>
+  <Step title="Send a pull request">
+    When your changes are ready, open a pull request following the [PR guidelines](#pull-requests) below.
+  </Step>
+</Steps>
+
+## Pull requests
+
+Only send pull requests for [open, unassigned issues labeled `accepting prs`](https://github.com/typescript-eslint/typescript-eslint/issues?q=is%3Aissue+is%3Aopen+label%3A%22accepting+prs%22+no%3Aassignee), with one exception: extremely minor documentation typos can be fixed without a linked issue.
+
+### PR title format
+
+PR titles must follow this format:
+
+```
+<type>(<package>): <short description>
+```
+
+| Field | Values |
+|---|---|
+| `type` | `docs`, `feat`, `fix`, `test`, `chore` |
+| `package` | The affected package name (e.g., `eslint-plugin`, `parser`). Omit if changes span multiple packages. |
+| `short description` | A concise summary of the change |
+
+Examples:
+- `fix(scope-manager): correct handling for class static blocks`
+- `docs: fix links to getting started in README.md`
+- `feat(eslint-plugin): add no-unsafe-optional-chaining rule`
+
+### PR guidelines
+
+**Do:**
+- Fill out the PR template completely
+- Reference the issue your PR resolves
+- Run all checks locally before un-drafting — see [Validating changes](/contributing/local-development#validating-changes)
+- Post comments as line comments so they can be threaded
+- Re-request review after addressing feedback
+
+**Don't:**
+- Force push after the PR is open (it prevents incremental review)
+- Comment on a closed PR — file a new issue instead
+
+<Warning>
+If you use AI assistance in any part of your pull request, read the project's [AI Contribution Policy](https://github.com/typescript-eslint/typescript-eslint/blob/main/docs/contributing/AI_Contribution_Policy.mdx) before submitting.
+</Warning>
+
+### Code coverage
+
+The project aims for 100% code coverage in all PRs (except the `website` package). Coverage is reported locally when you run `pnpm run test` and by the `codecov` bot on each PR.
+
+### After you submit
+
+PRs are reviewed oldest to newest, except for high-priority bug fixes. The volunteer maintainers have limited time — your PR has not been forgotten.
+
+Once a review is posted, address the feedback, then re-request review from each maintainer who provided comments. After approval, the maintainers will squash-merge your PR into `main`.
+
+## Getting help
+
+If you have a question while working on a contribution, post a comment in the relevant issue or PR. There is no need to tag anyone individually — a maintainer will respond when they can.
+
+You can also ask in the [Discord server](https://discord.gg/FSxKq8Tdyg) `#contributing` channel.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Local development" icon="terminal" href="/contributing/local-development">
+    Set up your local environment to build and test the repository.
+  </Card>
+  <Card title="Building custom rules" icon="wrench" href="/developers/custom-rules">
+    Write your own ESLint rules using typescript-eslint APIs.
+  </Card>
+</CardGroup>

@@ -1,0 +1,527 @@
+---
+title: 'Frequently asked questions'
+description: 'Answers to common questions about typescript-eslint, including setup, ESLint compatibility, TypeScript configuration, JavaScript files, and framework-specific issues.'
+---
+
+## General
+
+<AccordionGroup>
+  <Accordion title="How do I turn on a @typescript-eslint rule?">
+    First make sure you've read the docs and understand ESLint configuration files:
+
+    - Read the [getting started guide](/getting-started/quickstart) to ensure your config is properly set up.
+    - Check [ESLint's documentation on configuring rules](https://eslint.org/docs/latest/use/configure/rules) to understand how to configure rules.
+
+    Rule docs detail the options each rule supports under the "Options" heading. The `rules` object keys are rule names and values follow this form:
+
+    ```ts
+    type Severity = 'off' | 'warn' | 'error';
+    type RuleConfig =
+      | Severity
+      | [Severity]
+      | [
+          Severity,
+          // Options is the tuple type from the rule docs
+          ...Options,
+        ];
+    ```
+
+    <Tabs>
+      <Tab title="Flat Config">
+        ```js title="eslint.config.mjs"
+        export default defineConfig(
+          // ... the rest of your config ...
+          {
+            rules: {
+              // turns a rule on with no configuration (i.e. uses the default configuration)
+              '@typescript-eslint/array-type': 'error',
+              // turns on a rule with configuration
+              '@typescript-eslint/no-explicit-any': ['warn', { ignoreRestArgs: true }],
+            },
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy Config">
+        ```js title=".eslintrc.cjs"
+        module.exports = {
+          // ... the rest of your config ...
+          rules: {
+            // turns a rule on with no configuration (i.e. uses the default configuration)
+            '@typescript-eslint/array-type': 'error',
+            // turns on a rule with configuration
+            '@typescript-eslint/no-explicit-any': ['warn', { ignoreRestArgs: true }],
+          },
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="How can I ban a specific language feature?">
+    ESLint core contains the rule [`no-restricted-syntax`](https://eslint.org/docs/rules/no-restricted-syntax). This generic rule allows you to specify a [selector](https://eslint.org/docs/developer-guide/selectors) for the code you want to ban, along with a custom error message.
+
+    You can use an AST visualization tool such as the [typescript-eslint playground](https://typescript-eslint.io/play#showAST=es) > _Options_ > _AST Explorer_ > _ESTree_ to help figure out the AST structure you want to ban.
+
+    **Banning confusing property uses:**
+
+    ```jsonc
+    {
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          // Ban accessing `constructor.name`:
+          {
+            "selector": "MemberExpression[object.property.name='constructor'][property.name='name']",
+            "message": "'constructor.name' is not reliable after code minifier usage."
+          },
+          // Ban get and set accessors:
+          {
+            "selector": "Property:matches([kind = \"get\"], [kind = \"set\"]), MethodDefinition:matches([kind = \"get\"], [kind = \"set\"])",
+            "message": "Don't use get and set accessors."
+          }
+        ]
+      }
+    }
+    ```
+
+    **Banning specific uses of class properties:**
+
+    ```jsonc
+    {
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          // Ban `private` members:
+          {
+            "selector": ":matches(PropertyDefinition, MethodDefinition)[accessibility=\"private\"]",
+            "message": "Use `#private` members instead."
+          },
+          // Ban `#private` members:
+          {
+            "selector": ":matches(PropertyDefinition, MethodDefinition) > PrivateIdentifier.key",
+            "message": "Use the `private` modifier instead."
+          },
+          // Ban static `this`:
+          {
+            "selector": "MethodDefinition[static = true] ThisExpression",
+            "message": "Prefer using the class's name directly."
+          }
+        ]
+      }
+    }
+    ```
+
+    **Banning specific uses of TypeScript enums:**
+
+    ```jsonc
+    {
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          // Ban all enums:
+          {
+            "selector": "TSEnumDeclaration",
+            "message": "My reason for not using any enums at all."
+          },
+          // Ban just `const` enums:
+          {
+            "selector": "TSEnumDeclaration[const=true]",
+            "message": "My reason for not using const enums."
+          },
+          // Ban just non-`const` enums:
+          {
+            "selector": "TSEnumDeclaration:not([const=true])",
+            "message": "My reason for not using non-const enums."
+          }
+        ]
+      }
+    }
+    ```
+
+    **Banning unlabeled TypeScript tuple members:**
+
+    ```jsonc
+    {
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "TSTupleType > :not(TSNamedTupleMember)",
+            "message": "All tuples should have labels."
+          }
+        ]
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="How do I check what versions are installed?">
+    If you have multiple versions of our tooling installed, it can cause inconsistent lint results because ESLint may load a different version each run.
+
+    Installing our tooling in the root of your project does not guarantee only one version is installed — one or more of your dependencies may have their own dependency on our tooling. For example, `react-scripts` (part of `create-react-app`) has a dependency on our tooling.
+
+    Check what versions are installed using:
+
+    ```bash
+    npm list @typescript-eslint/eslint-plugin @typescript-eslint/parser
+    ```
+
+    If you see more than one version installed, you will need to either use [yarn resolutions](https://classic.yarnpkg.com/en/docs/selective-version-resolutions) to force a single version, or downgrade your root versions to match the dependency versions.
+
+    <Warning>
+      The best course of action is to wait until your dependency releases a new version with support for our latest versions.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Changes to one file are not reflected when linting other files in my IDE">
+    ESLint currently does not have any way of telling parsers when an arbitrary file is changed on disk. If you change file A that is imported by file B, it won't update lint caches for file B — even if file B's text contents have changed. Sometimes the only solution is to restart your ESLint editor extension altogether.
+
+    <Tip>
+      [VS Code's ESLint extension](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) provides an **ESLint: Restart ESLint Server** action.
+    </Tip>
+
+    Rules such as `no-unsafe-argument`, `no-unsafe-assignment`, and `no-unsafe-call` are often impacted by this cross-file caching issue.
+
+    See [this issue comment](https://github.com/typescript-eslint/typescript-eslint/issues/5845#issuecomment-1283248238) for more information.
+  </Accordion>
+
+  <Accordion title="How does typescript-eslint compare to native-speed linters?">
+    Native-speed linters such as [Biome](https://biomejs.dev/linter), [Deno linter](https://docs.deno.com/runtime/manual/tools/linter), and [oxlint](https://oxc.rs/docs/guide/usage/linter.html) run in Go or Rust and can run significantly faster than ESLint for non-type-aware linting. They can also be easier to configure.
+
+    However, until they support [typed linting](/getting-started/typed-linting), they aren't a full replacement for typescript-eslint. We recommend "dual linting": using those linters for what they support, then adding ESLint for typed linting in a parallel or second step.
+
+    The `*-type-checked-only` shared configs enable only type-checked rules in your ESLint config. For example:
+
+    <Tabs>
+      <Tab title="Flat Config">
+        ```js title="eslint.config.mjs"
+        import js from '@eslint/js';
+        import { defineConfig } from 'eslint/config';
+        import tseslint from 'typescript-eslint';
+
+        export default defineConfig(
+          tseslint.configs.recommendedTypeCheckedOnly,
+          {
+            languageOptions: {
+              parserOptions: {
+                projectService: true,
+              },
+            },
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy Config">
+        ```js title=".eslintrc.cjs"
+        module.exports = {
+          extends: ['plugin:@typescript-eslint/recommended-type-checked-only'],
+          parserOptions: {
+            projectService: true,
+            tsconfigRootDir: __dirname,
+          },
+          root: true,
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="I see 'The property is deprecated on nodes' warnings">
+    This warning means you're using an ESLint plugin (or other tooling) that hasn't been updated for typescript-eslint v6. Make sure you're using the latest versions of each of your ESLint plugins.
+
+    If you've updated all plugins and can't identify the source, try either of:
+
+    - Running with [`--trace-deprecation`](https://nodejs.org/api/cli.html#--trace-deprecation): `npx cross-env NODE_OPTIONS=--trace-deprecation npm run lint`
+    - Disabling half your plugins at a time to narrow down which one is responsible
+
+    Then open a GitHub issue on that plugin asking for a release supporting typescript-eslint v6.
+
+    <Tip>
+      For plugin developers who still need to support typescript-eslint v5, fall back to the old property key if the new one doesn't exist:
+
+      ```diff
+      - node.typeParameters
+      + node.typeArguments || node.typeParameters
+      ```
+    </Tip>
+  </Accordion>
+
+  <Accordion title="My linting feels really slow">
+    See the [typed linting performance troubleshooting guide](/troubleshooting/typed-linting-issues) for guidance on diagnosing and resolving performance issues.
+  </Accordion>
+</AccordionGroup>
+
+## ESLint-related
+
+<AccordionGroup>
+  <Accordion title="Why is an ESLint core rule not working correctly with TypeScript code?">
+    This happens because TypeScript adds new features that ESLint doesn't know about.
+
+    First, check the [list of "extension" rules](/rules/overview). An extension rule extends a base ESLint rule to support TypeScript syntax. If you find the rule there, configure it by disabling the base rule and enabling the extension rule. For example with the `semi` rule:
+
+    ```json
+    {
+      "rules": {
+        "semi": "off",
+        "@typescript-eslint/semi": "error"
+      }
+    }
+    ```
+
+    If you don't find an existing extension rule, or it doesn't work for your case, check the project's issues. Make sure to check the latest list of extension rules before filing an issue — a new version is released every week.
+  </Accordion>
+
+  <Accordion title="I get errors from the no-undef rule about global variables not being defined">
+    The `no-undef` lint rule does not use TypeScript to determine global variables — it relies on ESLint's configuration. We strongly recommend **not** using `no-undef` on TypeScript projects. TypeScript already provides these checks, more accurately and without extra configuration.
+
+    As of v4.0.0, this also applies to types. If you use global types from a third-party package (such as anything from an `@types` package), you must configure ESLint to define those global types.
+
+    For mixed projects with both JavaScript and TypeScript, you can disable `no-undef` only for TypeScript files:
+
+    <Tabs>
+      <Tab title="Flat Config">
+        ```js title="eslint.config.mjs"
+        import { defineConfig } from 'eslint/config';
+
+        export default defineConfig(
+          // ... the rest of your config ...
+          {
+            files: ['**/*.{ts,tsx,mts,cts}'],
+            rules: {
+              'no-undef': 'off',
+            },
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy Config">
+        ```js title=".eslintrc.js"
+        module.exports = {
+          // ... the rest of your config ...
+          overrides: [
+            {
+              files: ['*.ts', '*.mts', '*.cts', '*.tsx'],
+              rules: {
+                'no-undef': 'off',
+              },
+            },
+          ],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="I get errors from no-namespace and/or no-var rules about declaring global variables">
+    Two common TypeScript patterns for declaring global variables each violate a lint rule:
+
+    - `declare global` with a `var` violates [`no-var`](https://eslint.org/docs/latest/rules/no-var):
+
+      ```ts
+      declare global {
+        var myValue: string;
+        // Unexpected var, use let or const instead. eslint (no-var)
+      }
+      ```
+
+    - `declare namespace globalThis` violates [`@typescript-eslint/no-namespace`](https://typescript-eslint.io/rules/no-namespace):
+
+      ```ts
+      declare namespace globalThis {
+        // ES2015 module syntax is preferred over namespaces. eslint (@typescript-eslint/no-namespace)
+        let myValue: string;
+      }
+      ```
+
+    Using global variables is generally discouraged. If you absolutely must use one of these strategies, use an [ESLint configuration comment](https://eslint.org/docs/latest/use/configure/rules#using-configuration-comments-1) to disable the rule as needed:
+
+    ```ts
+    declare global {
+      // eslint-disable-next-line no-var -- Provided by an old third-party integration.
+      var myValue: string;
+    }
+    ```
+
+    <Tip>
+      Whenever you need to disable an ESLint rule, include an informative comment explaining why.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Can I use ESLint's --cache flag with typescript-eslint?">
+    [ESLint's `--cache` option](https://eslint.org/docs/latest/use/command-line-interface#caching) caches on a per-file basis. You can use it, but it will only work reliably for untyped rules — and even then, not always.
+
+    Any rule that checks logic across files (including many rules from `eslint-plugin-import`) creates cross-file dependencies. [Typed lint rules](/getting-started/typed-linting) almost always have dependencies on types across files in practice. ESLint's caching doesn't account for those cross-file dependencies.
+
+    We don't recommend using `--cache`.
+  </Accordion>
+</AccordionGroup>
+
+## TypeScript-related
+
+<AccordionGroup>
+  <Accordion title="Should TypeScript be installed globally or locally?">
+    Install TypeScript locally, not globally:
+
+    ```bash
+    # Correct
+    npm install typescript
+    pnpm add typescript
+
+    # Incorrect — do not use
+    npm install -g typescript
+    pnpm add -g typescript
+    ```
+
+    See [issue #2041](https://github.com/typescript-eslint/typescript-eslint/issues/2041) for more information.
+  </Accordion>
+
+  <Accordion title="Why don't I see TypeScript errors in my ESLint output?">
+    typescript-eslint does not reproduce TypeScript compiler errors. TypeScript's compiler is specifically designed to validate the correctness of your codebase; duplicating those errors in ESLint would slow down the lint run and provide no additional value.
+
+    Instead, typescript-eslint **augments** TypeScript's built-in checks with lint rules that consume type information in new ways beyond just verifying runtime correctness.
+
+    <Note>
+      TypeScript computes type information lazily. Asking for compiler errors would add approximately 100ms per file — which can add up to several seconds or minutes depending on your codebase size.
+    </Note>
+  </Accordion>
+
+  <Accordion title="How can I specify a TypeScript version or parserOptions.typescriptLocation?">
+    You can't, and you shouldn't want to.
+
+    You should use the same version of TypeScript for linting as for the rest of your project. TypeScript versions often have slight differences in edge cases that can produce contradictory information between typescript-eslint rules and your editor. For example:
+
+    - `@typescript-eslint/strict-boolean-expressions` might be operating with TypeScript version _X_ and think a variable is `string[] | undefined`
+    - TypeScript itself might be on version _X+1-beta_ and think the variable is `string[]`
+
+    See [this issue comment](https://github.com/typescript-eslint/typescript-eslint/issues/4102#issuecomment-963265514) for more details.
+  </Accordion>
+
+  <Accordion title="Why aren't // @ts-expect-error or // @ts-ignore comments affecting lint results?">
+    [`// @ts-expect-error`](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-9.html#-ts-expect-error-comments) and [`// @ts-ignore`](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-6.html#suppress-errors-in-ts-files-using--ts-ignore-comments) are TypeScript features. They only affect TypeScript's type checking — not ESLint.
+
+    Similarly, [ESLint configuration comments](https://eslint.org/docs/latest/use/configure/rules#using-configuration-comments) like `/* eslint ... */` only affect ESLint, not TypeScript type checking. These are separate tools.
+
+    <Tip>
+      You can use ESLint to enforce good usage of both kinds of comment directives:
+
+      - [`@typescript-eslint/ban-ts-comment`](https://typescript-eslint.io/rules/ban-ts-comment) can disallow `@ts-...` comments and/or require descriptions
+      - [`@eslint-community/eslint-plugin-eslint-comments`](https://eslint-community.github.io/eslint-plugin-eslint-comments) can enforce general ESLint comment best practices
+    </Tip>
+  </Accordion>
+
+  <Accordion title="How should I handle reports that conflict with verbatimModuleSyntax?">
+    Several TypeScript options affect how imports and exports are handled, including `allowSyntheticDefaultImports`, `esModuleInterop`, `importsNotUsedAsValues`, `preserveValueImports`, and `verbatimModuleSyntax`. Some typescript-eslint rules may not apply or may need special configuration in projects using these options.
+
+    For example, the default behavior of `no-require-imports` prohibits CommonJS `require` syntax entirely, but `verbatimModuleSyntax` requires it when authoring CommonJS modules — so you'll need to configure the rule to permit `import x = require('foo')` syntax.
+
+    Known rules that conflict with or require special configuration for `verbatimModuleSyntax`:
+
+    - [`consistent-type-imports`](https://typescript-eslint.io/rules/consistent-type-imports#comparison-with-importsnotusedasvalues--verbatimmodulesyntax): should be disabled
+    - [`no-import-type-side-effects`](https://typescript-eslint.io/rules/no-import-type-side-effects): only needed when using `verbatimModuleSyntax`
+    - [`no-namespace`](https://typescript-eslint.io/rules/no-namespace#when-not-to-use-it): some reports need to be ignored
+    - [`no-require-imports`](https://typescript-eslint.io/rules/no-require-imports): requires configuring its `allowAsImport` option
+
+    If you're using `importsNotUsedAsValues`, `isolatedModules`, and/or `preserveValueImports` TSConfig options, you may need to configure those rules as well. See each rule's documentation for details.
+  </Accordion>
+</AccordionGroup>
+
+## JavaScript files
+
+<AccordionGroup>
+  <Accordion title="One of my lint rules isn't working correctly on a pure JavaScript file">
+    This is expected — ESLint rules do not check file extensions on purpose, as it causes issues in environments that use non-standard extensions (for example, `.vue` and `.md` files can both contain TypeScript code to be linted).
+
+    If you have JavaScript code that you don't want certain lint rules applied to, use [ESLint's `files` configuration](https://eslint.org/docs/latest/use/configure/configuration-files#specifying-files-and-ignores) to either:
+
+    - (Recommended) Only enable TypeScript-specific rules on TypeScript file extensions
+    - Turn off TypeScript-specific rules on JavaScript-only file extensions
+  </Accordion>
+
+  <Accordion title="Should I run ESLint on transpiled output JavaScript files?">
+    No. Source TypeScript files contain all the content of output JavaScript files, plus type annotations. There's no benefit to also linting output JavaScript files.
+  </Accordion>
+</AccordionGroup>
+
+## Framework-specific
+
+<AccordionGroup>
+  <Accordion title="I use a framework (like Vue) that requires custom file extensions and get errors about parserOptions.extraFileExtensions">
+    Use `parserOptions.extraFileExtensions` to specify an array of non-TypeScript extensions to allow:
+
+    <Note>
+      See [Changes to `extraFileExtensions` with `projectService`](/troubleshooting/typed-linting-issues) to avoid performance issues when combining extra file extensions with the project service.
+    </Note>
+
+    <Tabs>
+      <Tab title="Flat Config">
+        ```js title="eslint.config.mjs"
+        export default defineConfig(
+          // ... the rest of your config ...
+          {
+            languageOptions: {
+              parserOptions: {
+                extraFileExtensions: ['.vue'],
+                projectService: true,
+              },
+            },
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy Config">
+        ```js title=".eslintrc.js"
+        module.exports = {
+          // ... the rest of your config ...
+          parserOptions: {
+            extraFileExtensions: ['.vue'],
+            projectService: true,
+            tsconfigRootDir: __dirname,
+          },
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="I am running into errors when parsing TypeScript in my .vue files">
+    Parsers like [`vue-eslint-parser`](https://www.npmjs.com/package/vue-eslint-parser) are required to parse `.vue` files. Move `@typescript-eslint/parser` inside `parserOptions` and use `vue-eslint-parser` as the top-level parser:
+
+    <Tabs>
+      <Tab title="Flat Config">
+        ```js title="eslint.config.mjs"
+        import tseslint from 'typescript-eslint';
+        import { defineConfig } from 'eslint/config';
+        import vueParser from 'vue-eslint-parser';
+
+        export default defineConfig(
+          // ... the rest of your config ...
+          {
+            languageOptions: {
+              parser: vueParser,
+              parserOptions: {
+                parser: tseslint.parser,
+                sourceType: 'module',
+              },
+            },
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy Config">
+        ```js title=".eslintrc.js"
+        module.exports = {
+          // ... the rest of your config ...
+          parser: 'vue-eslint-parser',
+          parserOptions: {
+            parser: '@typescript-eslint/parser',
+            extraFileExtensions: ['.vue'],
+          },
+        };
+        ```
+      </Tab>
+    </Tabs>
+
+    The `parserOptions.parser` option can also specify an object to configure multiple parsers. See the [`vue-eslint-parser` usage guide](https://eslint.vuejs.org/user-guide/#usage) for more details.
+  </Accordion>
+</AccordionGroup>

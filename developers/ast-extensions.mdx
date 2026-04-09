@@ -1,0 +1,281 @@
+---
+title: 'AST extensions'
+description: 'How typescript-eslint extends the ESTree AST with TypeScript-specific node types, and how to use them in ESLint rule selectors.'
+keywords: ['AST', 'TSESTree', 'AST_NODE_TYPES', 'TypeScript nodes', 'ESTree', 'selectors']
+---
+
+typescript-eslint extends the standard ESTree AST format used by ESLint to represent TypeScript syntax. Understanding these extensions is essential for writing rules that target TypeScript-specific code.
+
+## What is an AST?
+
+An Abstract Syntax Tree (AST) is the structured, in-memory representation of source code that tools like ESLint operate on. Each node in the tree corresponds to a syntactic construct — a function declaration, a variable binding, an expression — and carries information such as the node type, its children, and its source location.
+
+ESLint's rule API exposes the AST through visitor functions. You declare which node types you want to visit, and ESLint calls your function with the matching node as it traverses the tree:
+
+```typescript
+create(context) {
+  return {
+    // Called for every function declaration in the file
+    FunctionDeclaration(node) {
+      // node is a TSESTree.FunctionDeclaration
+    },
+  };
+},
+```
+
+## How TypeScript's AST differs from ESTree
+
+The ESTree specification describes the AST format for JavaScript. It does not cover TypeScript-specific constructs such as type annotations, interfaces, enums, or generics.
+
+typescript-eslint uses its own parser (`@typescript-eslint/parser`) which produces an augmented AST that:
+
+1. Extends every standard ESTree node with TypeScript-specific properties (for example, adding `typeAnnotation` to `Identifier` nodes)
+2. Introduces new node types — named with a `TS` prefix — for constructs that have no JavaScript equivalent
+
+This means you can continue to use standard ESTree selectors for JavaScript syntax, while also having access to new selectors for TypeScript syntax.
+
+## The `TSESTree` namespace
+
+All AST node types are available as TypeScript types in the `TSESTree` namespace, exported from `@typescript-eslint/utils`:
+
+```typescript
+import { TSESTree } from '@typescript-eslint/utils';
+
+function handleInterface(node: TSESTree.TSInterfaceDeclaration): void {
+  console.log(node.id.name); // the interface name
+}
+```
+
+`TSESTree.Node` is a discriminated union of every node type, with `type` as the discriminant. You can use it to write generic node-handling functions:
+
+```typescript
+import { AST_NODE_TYPES, TSESTree } from '@typescript-eslint/utils';
+
+function describeNode(node: TSESTree.Node): string {
+  switch (node.type) {
+    case AST_NODE_TYPES.ArrayExpression:
+      return `Array containing ${node.elements.map(describeNode).join(', ')}`;
+    case AST_NODE_TYPES.Literal:
+      return `Literal value ${node.raw}`;
+    default:
+      return node.type;
+  }
+}
+```
+
+## The `AST_NODE_TYPES` enum
+
+`AST_NODE_TYPES` is an enum exported from `@typescript-eslint/utils` that holds string values for every node type. Use it instead of raw string literals to get autocomplete and type safety:
+
+```typescript
+import { AST_NODE_TYPES } from '@typescript-eslint/utils';
+
+// Prefer this:
+if (node.type === AST_NODE_TYPES.TSInterfaceDeclaration) { ... }
+
+// Over this:
+if (node.type === 'TSInterfaceDeclaration') { ... }
+```
+
+## Key TypeScript-specific node types
+
+The following are the most commonly encountered TypeScript-specific AST nodes. All are prefixed with `TS`.
+
+### Type annotations
+
+| Node type | What it represents |
+|---|---|
+| `TSTypeAnnotation` | The `: Type` part of a typed binding (e.g., `x: string`) |
+| `TSTypeReference` | A reference to a named type (e.g., `Array<string>`, `MyInterface`) |
+| `TSLiteralType` | A literal type (e.g., `42`, `"hello"`, `true`) |
+| `TSUnionType` | A union type (e.g., `string \| number`) |
+| `TSIntersectionType` | An intersection type (e.g., `A & B`) |
+| `TSArrayType` | An array type written as `T[]` |
+| `TSTupleType` | A tuple type (e.g., `[string, number]`) |
+| `TSFunctionType` | A function type (e.g., `(x: string) => void`) |
+| `TSVoidKeyword` | The `void` type |
+| `TSNullKeyword` | The `null` type |
+| `TSUndefinedKeyword` | The `undefined` type |
+| `TSAnyKeyword` | The `any` type |
+| `TSUnknownKeyword` | The `unknown` type |
+| `TSNeverKeyword` | The `never` type |
+
+### Declarations
+
+| Node type | What it represents |
+|---|---|
+| `TSInterfaceDeclaration` | An `interface` declaration |
+| `TSTypeAliasDeclaration` | A `type` alias declaration (e.g., `type Foo = ...`) |
+| `TSEnumDeclaration` | An `enum` declaration |
+| `TSEnumMember` | A single member inside an `enum` |
+| `TSModuleDeclaration` | A `namespace` or `module` declaration |
+
+### Generics and type parameters
+
+| Node type | What it represents |
+|---|---|
+| `TSTypeParameterDeclaration` | The `<T>` list on a generic declaration |
+| `TSTypeParameter` | A single type parameter (e.g., `T extends string`) |
+| `TSTypeParameterInstantiation` | The `<string>` in a generic instantiation |
+
+### Type assertions and casting
+
+| Node type | What it represents |
+|---|---|
+| `TSAsExpression` | An `as` type assertion (e.g., `x as string`) |
+| `TSTypeAssertion` | An angle-bracket assertion (e.g., `<string>x`) |
+| `TSSatisfiesExpression` | A `satisfies` expression (e.g., `x satisfies T`) |
+| `TSNonNullExpression` | A non-null assertion (e.g., `x!`) |
+
+### Accessors and modifiers
+
+| Node type | What it represents |
+|---|---|
+| `TSAbstractMethodDefinition` | An `abstract` method in a class |
+| `TSAbstractPropertyDefinition` | An `abstract` property in a class |
+| `TSParameterProperty` | A constructor parameter with `public`, `private`, or `protected` |
+| `TSReadonlyKeyword` | The `readonly` modifier |
+| `TSOverrideKeyword` | The `override` modifier |
+
+### Other constructs
+
+| Node type | What it represents |
+|---|---|
+| `TSImportType` | An `import(...)` type |
+| `TSConditionalType` | A conditional type (e.g., `T extends U ? X : Y`) |
+| `TSMappedType` | A mapped type (e.g., `{ [K in keyof T]: ... }`) |
+| `TSIndexedAccessType` | An indexed access type (e.g., `T[K]`) |
+| `TSTemplateLiteralType` | A template literal type |
+
+## Using AST selectors for TypeScript nodes
+
+ESLint uses [esquery](https://github.com/estools/esquery) syntax for AST selectors. TypeScript-specific node types work with the same selector syntax as standard nodes.
+
+### Simple type selectors
+
+Target a specific TypeScript node type by name:
+
+```typescript
+create(context) {
+  return {
+    // Fires for every interface declaration
+    TSInterfaceDeclaration(node) {
+      // node: TSESTree.TSInterfaceDeclaration
+      console.log(node.id.name);
+    },
+
+    // Fires for every enum declaration
+    TSEnumDeclaration(node) {
+      // node: TSESTree.TSEnumDeclaration
+      console.log(node.id.name);
+    },
+
+    // Fires for every `as` expression
+    TSAsExpression(node) {
+      // node: TSESTree.TSAsExpression
+    },
+  };
+},
+```
+
+### Combining selectors
+
+Use a comma-separated list to visit multiple node types with one handler. Add an explicit type annotation since TypeScript cannot infer the union:
+
+```typescript
+import { TSESTree } from '@typescript-eslint/utils';
+
+create(context) {
+  return {
+    'TSInterfaceDeclaration, TSTypeAliasDeclaration'(
+      node: TSESTree.TSInterfaceDeclaration | TSESTree.TSTypeAliasDeclaration,
+    ) {
+      // fires for both interfaces and type aliases
+    },
+  };
+},
+```
+
+### Attribute and child selectors
+
+Use esquery attribute selectors to filter nodes by their properties:
+
+```typescript
+create(context) {
+  return {
+    // Only fires when the `any` keyword appears as a type annotation
+    'TSTypeAnnotation > TSAnyKeyword'(node) {
+      context.report({
+        messageId: 'noExplicitAny',
+        node,
+      });
+    },
+
+    // Fires for type aliases whose right-hand side is a union
+    'TSTypeAliasDeclaration > TSUnionType'(node) {
+      // node: TSESTree.TSUnionType
+    },
+  };
+},
+```
+
+### Exit selectors (`:exit`)
+
+Append `:exit` to run a handler when the traversal _leaves_ a node rather than when it enters:
+
+```typescript
+create(context) {
+  return {
+    'TSInterfaceDeclaration:exit'(node) {
+      // runs after all children of the interface have been visited
+    },
+  };
+},
+```
+
+## Exploring node structure with AST Explorer
+
+[AST Explorer](https://astexplorer.net) is the best tool for understanding how TypeScript code maps to AST nodes. To use it with typescript-eslint:
+
+<Steps>
+  <Step title="Open AST Explorer">
+    Go to [astexplorer.net](https://astexplorer.net).
+  </Step>
+  <Step title="Select the parser">
+    In the top toolbar, set the language to **JavaScript** and the parser to **@typescript-eslint/parser**.
+  </Step>
+  <Step title="Paste your TypeScript code">
+    Paste the TypeScript snippet you want to understand into the editor. The AST panel on the right updates in real time.
+  </Step>
+  <Step title="Click nodes to inspect">
+    Click any node in the AST panel to highlight the corresponding source code, and vice versa. This shows you the exact node `type`, property names, and child structure to use in your rule selectors.
+  </Step>
+</Steps>
+
+## Practical selector examples
+
+The following table shows common TypeScript patterns and the selectors that match them:
+
+| Pattern | Selector |
+|---|---|
+| Any interface declaration | `TSInterfaceDeclaration` |
+| Any enum | `TSEnumDeclaration` |
+| Any `as` cast | `TSAsExpression` |
+| Non-null assertion `x!` | `TSNonNullExpression` |
+| `any` in a type position | `TSAnyKeyword` |
+| Type alias that is a union | `TSTypeAliasDeclaration > TSUnionType` |
+| Generic type parameter declaration | `TSTypeParameterDeclaration` |
+| `readonly` modifier | `TSReadonlyKeyword` |
+| `abstract` class method | `TSAbstractMethodDefinition` |
+| `satisfies` expression | `TSSatisfiesExpression` |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Building custom rules" icon="wrench" href="/developers/custom-rules">
+    Use these node types to write type-aware ESLint rules.
+  </Card>
+  <Card title="ESLint plugins" icon="plug" href="/developers/eslint-plugins">
+    Bundle rules that target TypeScript AST nodes into a plugin.
+  </Card>
+</CardGroup>

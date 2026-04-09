@@ -1,0 +1,429 @@
+---
+title: 'Shared configs'
+description: 'Pre-built ESLint configurations for TypeScript projects, from basic correctness to strict type-aware linting.'
+---
+
+[ESLint shareable configurations](https://eslint.org/docs/latest/developer-guide/shareable-configs) give you a curated set of rule settings you can extend from. typescript-eslint ships built-in configurations via `@typescript-eslint/eslint-plugin` and the `typescript-eslint` package.
+
+<Note>
+  With the exception of `all`, `strict`, and `strict-type-checked`, all configurations are considered **stable**. Rule additions and removals are treated as breaking changes and will only be done in major version bumps.
+</Note>
+
+## Recommended configurations
+
+Most projects should extend from one of these four configurations, and optionally layer a `stylistic` config on top.
+
+<CardGroup cols={2}>
+  <Card title="recommended" icon="check">
+    Rules for code correctness. No type information required. A safe drop-in starting point.
+  </Card>
+  <Card title="recommended-type-checked" icon="shield-check">
+    All of `recommended` plus additional rules that require type information.
+  </Card>
+  <Card title="strict" icon="triangle-alert">
+    All of `recommended` plus opinionated rules that catch additional bugs. **Not semver-stable.**
+  </Card>
+  <Card title="strict-type-checked" icon="shield-x">
+    All of `strict` and `recommended-type-checked` combined, with extra type-aware strict rules. **Not semver-stable.**
+  </Card>
+  <Card title="stylistic" icon="paintbrush">
+    Best-practice style rules that don't affect program logic. Requires no type information.
+  </Card>
+  <Card title="stylistic-type-checked" icon="wand-sparkles">
+    All of `stylistic` plus additional stylistic rules that require type information.
+  </Card>
+</CardGroup>
+
+### Projects without type checking
+
+If your project does not enable typed linting, extend from `recommended` and `stylistic` to start:
+
+<Tabs>
+  <Tab title="Flat config (eslint.config.mjs)">
+    ```js eslint.config.mjs
+    // @ts-check
+
+    import js from '@eslint/js';
+    import { defineConfig } from 'eslint/config';
+    import tseslint from 'typescript-eslint';
+
+    export default defineConfig(
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      tseslint.configs.stylistic,
+    );
+    ```
+  </Tab>
+  <Tab title="Legacy config (.eslintrc.js)">
+    ```js .eslintrc.js
+    module.exports = {
+      extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended',
+        'plugin:@typescript-eslint/stylistic',
+      ],
+    };
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  If a majority of developers on your project are comfortable with TypeScript, consider replacing `recommended` with `strict`.
+</Tip>
+
+### Projects with type checking
+
+If your project enables typed linting, extend from `recommended-type-checked` and `stylistic-type-checked`:
+
+<Note>
+  To use type-checked configs you must also configure `languageOptions.parserOptions`. See [parser options](/configuration/parser-options) for details.
+</Note>
+
+<Tabs>
+  <Tab title="Flat config (eslint.config.mjs)">
+    ```js eslint.config.mjs
+    // @ts-check
+
+    import js from '@eslint/js';
+    import { defineConfig } from 'eslint/config';
+    import tseslint from 'typescript-eslint';
+
+    export default defineConfig(
+      js.configs.recommended,
+      tseslint.configs.recommendedTypeChecked,
+      tseslint.configs.stylisticTypeChecked,
+      {
+        languageOptions: {
+          parserOptions: {
+            projectService: true,
+          },
+        },
+      },
+    );
+    ```
+  </Tab>
+  <Tab title="Legacy config (.eslintrc.js)">
+    ```js .eslintrc.js
+    module.exports = {
+      extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended-type-checked',
+        'plugin:@typescript-eslint/stylistic-type-checked',
+      ],
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: __dirname,
+      },
+    };
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  If a majority of developers on your project are comfortable with TypeScript, consider replacing `recommended-type-checked` with `strict-type-checked`.
+</Tip>
+
+---
+
+## Configuration details
+
+<AccordionGroup>
+
+  <Accordion title="recommended">
+    Rules for code correctness that you can drop in without additional configuration. These rules are those whose reports are almost always for a bad practice and/or a likely bug. `recommended` also disables core ESLint rules known to conflict with typescript-eslint rules or cause issues in TypeScript codebases.
+
+    **Requires type information:** No  
+    **Semver-stable:** Yes
+
+    <Tabs>
+      <Tab title="Flat config (eslint.config.mjs)">
+        ```js eslint.config.mjs
+        export default defineConfig(
+          tseslint.configs.recommended,
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy config (.eslintrc.js)">
+        ```js .eslintrc.js
+        module.exports = {
+          extends: ['plugin:@typescript-eslint/recommended'],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="recommended-type-checked">
+    Contains all of `recommended` along with additional recommended rules that require type information. Rules newly added in this configuration are similarly useful to those in `recommended`.
+
+    **Requires type information:** Yes  
+    **Semver-stable:** Yes
+
+    <Tabs>
+      <Tab title="Flat config (eslint.config.mjs)">
+        ```js eslint.config.mjs
+        export default defineConfig(
+          tseslint.configs.recommendedTypeChecked,
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy config (.eslintrc.js)">
+        ```js .eslintrc.js
+        module.exports = {
+          extends: ['plugin:@typescript-eslint/recommended-type-checked'],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="strict">
+    Contains all of `recommended`, plus additional strict rules that can also catch bugs. Rules added in `strict` are more opinionated than recommended rules and might not apply to all projects. Some rules enabled in `recommended` default to stricter settings in this configuration.
+
+    **Requires type information:** No  
+    **Semver-stable:** No — rule options may change outside of major versions
+
+    <Warning>
+      We recommend extending from `strict` only if a nontrivial percentage of your developers are highly proficient in TypeScript.
+    </Warning>
+
+    <Tabs>
+      <Tab title="Flat config (eslint.config.mjs)">
+        ```js eslint.config.mjs
+        export default defineConfig(
+          tseslint.configs.strict,
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy config (.eslintrc.js)">
+        ```js .eslintrc.js
+        module.exports = {
+          extends: ['plugin:@typescript-eslint/strict'],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="strict-type-checked">
+    Contains all of `recommended`, `recommended-type-checked`, and `strict`, along with additional strict rules that require type information. Rules newly added in this configuration are similarly useful and opinionated to those in `strict`.
+
+    **Requires type information:** Yes  
+    **Semver-stable:** No — rule options may change outside of major versions
+
+    <Warning>
+      We recommend extending from `strict-type-checked` only if a nontrivial percentage of your developers are highly proficient in TypeScript.
+    </Warning>
+
+    <Tabs>
+      <Tab title="Flat config (eslint.config.mjs)">
+        ```js eslint.config.mjs
+        export default defineConfig(
+          tseslint.configs.strictTypeChecked,
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy config (.eslintrc.js)">
+        ```js .eslintrc.js
+        module.exports = {
+          extends: ['plugin:@typescript-eslint/strict-type-checked'],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="stylistic">
+    Rules considered best practice for modern TypeScript codebases that do not impact program logic. These rules are generally opinionated about enforcing simpler code patterns. Note that `stylistic` does not replace `recommended` or `strict` — it adds additional rules on top.
+
+    **Requires type information:** No  
+    **Semver-stable:** Yes
+
+    <Tabs>
+      <Tab title="Flat config (eslint.config.mjs)">
+        ```js eslint.config.mjs
+        export default defineConfig(
+          tseslint.configs.stylistic,
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy config (.eslintrc.js)">
+        ```js .eslintrc.js
+        module.exports = {
+          extends: ['plugin:@typescript-eslint/stylistic'],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="stylistic-type-checked">
+    Contains all of `stylistic`, along with additional stylistic rules that require type information. Note that `stylistic-type-checked` does not replace `recommended-type-checked` or `strict-type-checked` — it adds additional rules on top.
+
+    **Requires type information:** Yes  
+    **Semver-stable:** Yes
+
+    <Tabs>
+      <Tab title="Flat config (eslint.config.mjs)">
+        ```js eslint.config.mjs
+        export default defineConfig(
+          tseslint.configs.stylisticTypeChecked,
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy config (.eslintrc.js)">
+        ```js .eslintrc.js
+        module.exports = {
+          extends: ['plugin:@typescript-eslint/stylistic-type-checked'],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Other configurations
+
+typescript-eslint includes several utility configurations.
+
+<AccordionGroup>
+
+  <Accordion title="all">
+    Enables every rule provided by typescript-eslint. Many rules are not applicable in all codebases or are meant to be configured per-project.
+
+    **Semver-stable:** No
+
+    <Warning>
+      We do not recommend extending from `all`. Many rules conflict with each other and/or require per-project configuration.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="base">
+    A minimal ruleset that sets only the required parser and plugin options needed to run typescript-eslint. You should not normally need to extend from this directly — it is automatically included by all recommended configurations.
+  </Accordion>
+
+  <Accordion title="disable-type-checked">
+    Disables all type-aware linting and type-aware rules. Useful for applying via an override to specific file globs when you want type-aware linting everywhere _except_ those files (for example, plain `.js` files that are not part of your tsconfig).
+
+    **Semver-stable:** No
+
+    <Info>
+      If you use type-aware rules from other plugins, you must manually disable those rules or use a premade config they provide, as `disable-type-checked` only covers typescript-eslint's own rules.
+    </Info>
+
+    <Tabs>
+      <Tab title="Flat config (eslint.config.mjs)">
+        ```js eslint.config.mjs
+        export default defineConfig(
+          js.configs.recommended,
+          tseslint.configs.recommendedTypeChecked,
+          {
+            languageOptions: {
+              parserOptions: {
+                projectService: true,
+              },
+            },
+          },
+          // Disable type-checked rules for plain JS files
+          {
+            files: ['**/*.js'],
+            extends: [tseslint.configs.disableTypeChecked],
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy config (.eslintrc.js)">
+        ```js .eslintrc.js
+        module.exports = {
+          extends: [
+            'eslint:recommended',
+            'plugin:@typescript-eslint/recommended-type-checked',
+          ],
+          parserOptions: {
+            projectService: true,
+            tsconfigRootDir: __dirname,
+          },
+          root: true,
+          overrides: [
+            {
+              files: ['**/*.js'],
+              extends: ['plugin:@typescript-eslint/disable-type-checked'],
+            },
+          ],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="eslint-recommended">
+    A compatibility ruleset meant to be used after extending `eslint:recommended`. It disables core ESLint rules already checked by the TypeScript compiler, and enables rules that take advantage of modern TypeScript constructs. This config is automatically included when you use any of the recommended configurations.
+
+    <Tabs>
+      <Tab title="Flat config (eslint.config.mjs)">
+        ```js eslint.config.mjs
+        export default defineConfig(
+          js.configs.recommended,
+          tseslint.configs.eslintRecommended,
+        );
+        ```
+      </Tab>
+      <Tab title="Legacy config (.eslintrc.js)">
+        ```js .eslintrc.js
+        module.exports = {
+          extends: [
+            'eslint:recommended',
+            'plugin:@typescript-eslint/eslint-recommended',
+          ],
+        };
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="recommended-type-checked-only">
+    A version of `recommended` that _only_ contains type-checked rules and disables any corresponding core ESLint rules. This config combined with `recommended` is equivalent to `recommended-type-checked`.
+
+    ```js .eslintrc.js
+    module.exports = {
+      extends: ['plugin:@typescript-eslint/recommended-type-checked-only'],
+    };
+    ```
+  </Accordion>
+
+  <Accordion title="strict-type-checked-only">
+    A version of `strict` that _only_ contains type-checked rules and disables any corresponding core ESLint rules. This config combined with `strict` is equivalent to `strict-type-checked`.
+
+    **Semver-stable:** No
+
+    ```js .eslintrc.js
+    module.exports = {
+      extends: ['plugin:@typescript-eslint/strict-type-checked-only'],
+    };
+    ```
+  </Accordion>
+
+  <Accordion title="stylistic-type-checked-only">
+    A version of `stylistic` that _only_ contains type-checked rules and disables any corresponding core ESLint rules. This config combined with `stylistic` is equivalent to `stylistic-type-checked`.
+
+    ```js .eslintrc.js
+    module.exports = {
+      extends: ['plugin:@typescript-eslint/stylistic-type-checked-only'],
+    };
+    ```
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Formatting
+
+None of the configurations provided by typescript-eslint enable formatting rules (rules that only serve to enforce code whitespace and other trivia). We strongly recommend using [Prettier](https://prettier.io) or an equivalent formatter rather than ESLint formatting rules.
+
+## Suggesting configuration changes
+
+If you feel strongly that a specific rule should or should not be part of one of these configurations, [file an issue](https://github.com/typescript-eslint/typescript-eslint/issues/new?assignees=&labels=package%3A+eslint-plugin%2Cpreset+config+change%2Ctriage&template=09-config-change.yaml&title=Configs%3A+%3Ca+short+description+of+my+proposal%3E) with a detailed argument explaining your reasoning.

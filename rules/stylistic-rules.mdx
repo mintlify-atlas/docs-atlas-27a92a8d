@@ -1,0 +1,833 @@
+---
+title: "Stylistic rules"
+description: "Rules that enforce code style and consistency for TypeScript — no impact on program logic, but significant impact on readability and maintainability."
+keywords: ["eslint", "typescript", "stylistic", "code style", "formatting", "consistency"]
+---
+
+Stylistic rules promote consistent patterns across a TypeScript codebase. Unlike correctness rules, they will not catch bugs — but they reduce cognitive overhead by making code predictable, and they catch redundancy (like unnecessary type annotations) that makes code harder to maintain.
+
+Stylistic rules live in two shared configs:
+
+| Config | Description |
+|---|---|
+| `stylistic` | Stylistic rules that work without type information |
+| `stylistic-type-checked` | All of `stylistic` plus stylistic rules that require type information |
+
+```js eslint.config.mjs
+import { defineConfig } from 'eslint/config';
+import tseslint from 'typescript-eslint';
+
+export default defineConfig(
+  ...tseslint.configs.recommended,
+  ...tseslint.configs.stylisticTypeChecked, // includes stylistic
+  {
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+);
+```
+
+<Note>
+You can use `stylistic` without type information if you want to avoid the setup cost of typed linting. `stylistic-type-checked` is the superset that includes all stylistic rules.
+</Note>
+
+---
+
+## `consistent-type-imports`
+
+**Config:** not in shared configs (opt-in) | **Requires type info:** no
+
+Enforces using `import type` for imports that are only used as types. This allows bundlers and transpilers to erase type-only imports without executing module side effects, and makes the intent explicit to readers.
+
+```typescript
+// ❌ Violation — User is only used as a type, not a value
+import { User, createUser } from './user';
+const user: User = createUser();
+
+// ✅ Fix — split into value and type imports
+import type { User } from './user';
+import { createUser } from './user';
+const user: User = createUser();
+```
+
+**Options:**
+
+```json
+["error", {
+  "prefer": "type-imports",           // "type-imports" (default) or "no-type-imports"
+  "fixStyle": "separate-type-imports", // "separate-type-imports" (default) or "inline-type-imports"
+  "disallowTypeAnnotations": true     // disallow import() in type positions
+}]
+```
+
+With `fixStyle: "inline-type-imports"`, the autofix produces inline `type` specifiers instead of a separate `import type` declaration:
+
+```typescript
+// inline-type-imports style
+import { type User, createUser } from './user';
+```
+
+---
+
+## `consistent-type-definitions`
+
+**Config:** `stylistic`, `stylistic-type-checked` | **Requires type info:** no
+
+Enforces using either `interface` or `type` for object type definitions. The default is `interface`.
+
+<Tabs>
+  <Tab title="interface (default)">
+    ```json
+    ["error", "interface"]
+    ```
+
+    ```typescript
+    // ❌ Violation
+    type User = {
+      name: string;
+      age: number;
+    };
+
+    // ✅ Fix
+    interface User {
+      name: string;
+      age: number;
+    }
+    ```
+  </Tab>
+  <Tab title="type">
+    ```json
+    ["error", "type"]
+    ```
+
+    ```typescript
+    // ❌ Violation
+    interface User {
+      name: string;
+      age: number;
+    }
+
+    // ✅ Fix
+    type User = {
+      name: string;
+      age: number;
+    };
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+`interface` and `type` are not always interchangeable. Interfaces support declaration merging and are displayed more cleanly in IDE tooltips. Types support unions, intersections, and mapped types. The rule only applies to plain object type definitions.
+</Note>
+
+---
+
+## `array-type`
+
+**Config:** `stylistic`, `stylistic-type-checked` | **Requires type info:** no
+
+Enforces a consistent style for array type annotations. You can choose between the shorthand `T[]` syntax and the generic `Array<T>` syntax.
+
+**Options:**
+
+```json
+["error", { "default": "array", "readonly": "array" }]
+```
+
+- `"array"` — always use `T[]` (default)
+- `"generic"` — always use `Array<T>`
+- `"array-simple"` — use `T[]` for simple types, `Array<T>` for complex types
+
+<Tabs>
+  <Tab title="array (default)">
+    ```typescript
+    // ✅
+    const names: string[] = [];
+    const matrix: number[][] = [];
+
+    // ❌
+    const names: Array<string> = [];
+    ```
+  </Tab>
+  <Tab title="generic">
+    ```typescript
+    // ✅
+    const names: Array<string> = [];
+    const matrix: Array<Array<number>> = [];
+
+    // ❌
+    const names: string[] = [];
+    ```
+  </Tab>
+  <Tab title="array-simple">
+    ```typescript
+    // ✅ — simple type: use T[]
+    const names: string[] = [];
+
+    // ✅ — complex type: use Array<T>
+    const callbacks: Array<(x: number) => void> = [];
+
+    // ❌
+    const callbacks: ((x: number) => void)[] = [];
+    ```
+  </Tab>
+</Tabs>
+
+The `readonly` option applies the same style to `readonly T[]` / `ReadonlyArray<T>`.
+
+---
+
+## `naming-convention`
+
+**Config:** not in shared configs (opt-in) | **Requires type info:** yes (optional)
+
+Enforces naming patterns for every kind of identifier in TypeScript. This is one of the most flexible rules in the plugin — you configure it by supplying an array of selector + format pairs.
+
+**Default behavior (camelCase everything):**
+
+```json
+["error",
+  { "selector": "default", "format": ["camelCase"] },
+  { "selector": "variable", "format": ["camelCase", "UPPER_CASE"] },
+  { "selector": "parameter", "format": ["camelCase"], "leadingUnderscore": "allow" },
+  { "selector": "typeLike", "format": ["PascalCase"] }
+]
+```
+
+**Selectors** identify which identifiers the rule applies to:
+
+| Selector | Applies to |
+|---|---|
+| `default` | All identifiers not matched by a more specific selector |
+| `variable` | `const`, `let`, `var` declarations |
+| `function` | Function declarations and function expressions |
+| `parameter` | Function parameters |
+| `property` | Object and class properties |
+| `method` | Class and object methods |
+| `typeLike` | Classes, interfaces, type aliases, enums |
+| `enum` | Enum declarations |
+| `enumMember` | Enum members |
+| `import` | Import bindings |
+
+**Formats:**
+
+| Format | Description |
+|---|---|
+| `camelCase` | `myVariable` |
+| `strictCamelCase` | `myVariable` (no consecutive uppercase) |
+| `PascalCase` | `MyClass` |
+| `StrictPascalCase` | `MyClass` (no consecutive uppercase) |
+| `snake_case` | `my_variable` |
+| `UPPER_CASE` | `MY_CONSTANT` |
+
+**Example — enforcing strict conventions:**
+
+```json
+["error",
+  {
+    "selector": "variable",
+    "format": ["camelCase", "UPPER_CASE"],
+    "leadingUnderscore": "forbid"
+  },
+  {
+    "selector": "parameter",
+    "format": ["camelCase"],
+    "leadingUnderscore": "allow"
+  },
+  {
+    "selector": "typeLike",
+    "format": ["PascalCase"]
+  },
+  {
+    "selector": "enumMember",
+    "format": ["UPPER_CASE"]
+  },
+  {
+    "selector": "interface",
+    "format": ["PascalCase"],
+    "prefix": ["I"]
+  }
+]
+```
+
+```typescript
+// ✅
+const MAX_RETRIES = 3;
+const apiClient = createClient();
+interface IUserService { getUser(id: string): User }
+enum Direction { UP = 'UP', DOWN = 'DOWN' }
+
+// ❌ — interface missing I prefix
+interface UserService { getUser(id: string): User }
+```
+
+---
+
+## `prefer-optional-chain`
+
+**Config:** `stylistic-type-checked` | **Requires type info:** yes
+
+Enforces using the optional chaining operator (`?.`) instead of chained logical AND expressions (`&&`) when accessing nested properties that may be nullish.
+
+```typescript
+declare const user: { address?: { city?: string } } | null;
+
+// ❌ Violation — verbose logical AND chain
+const city = user && user.address && user.address.city;
+
+// ✅ Fix — optional chaining
+const city = user?.address?.city;
+
+// ❌ Violation — negated logical OR check
+if (!user || !user.address || !user.address.city) {
+  return;
+}
+
+// ✅ Fix
+if (!user?.address?.city) {
+  return;
+}
+```
+
+**Options:**
+
+```json
+["error", {
+  "checkAny": true,               // check operands typed as any
+  "checkUnknown": true,           // check operands typed as unknown
+  "checkString": true,            // check operands typed as string
+  "checkNumber": true,            // check operands typed as number
+  "checkBoolean": true,           // check operands typed as boolean
+  "checkBigInt": true,            // check operands typed as bigint
+  "requireNullish": false         // only flag when the operand could actually be null/undefined
+}]
+```
+
+---
+
+## `prefer-nullish-coalescing`
+
+**Config:** `stylistic-type-checked` | **Requires type info:** yes
+
+Enforces using the nullish coalescing operator (`??`) instead of the logical OR operator (`||`) when the left side is only being checked for `null` or `undefined`. The `||` operator falls through on any falsy value (including `0`, `''`, and `false`), which is often a bug.
+
+```typescript
+// ❌ Violation — || falls through on 0 and ""
+function getPort(port?: number): number {
+  return port || 3000; // returns 3000 when port is 0!
+}
+
+// ✅ Fix — ?? only falls through on null/undefined
+function getPort(port?: number): number {
+  return port ?? 3000; // returns 0 correctly
+}
+
+// ❌ Violation — conditional is checking for nullish, not falsy
+const name = user.name !== null && user.name !== undefined
+  ? user.name
+  : 'Anonymous';
+
+// ✅ Fix
+const name = user.name ?? 'Anonymous';
+```
+
+**Options:**
+
+```json
+["error", {
+  "ignoreTernaryTests": false,    // whether to ignore ternary expressions
+  "ignoreConditionalTests": false, // whether to ignore conditional (if) tests
+  "ignoreMixedLogicalExpressions": false, // ignore mixed && / || expressions
+  "ignorePrimitives": {
+    "boolean": false,
+    "number": false,
+    "string": false,
+    "bigint": false
+  }
+}]
+```
+
+---
+
+## `no-inferrable-types`
+
+**Config:** `stylistic`, `stylistic-type-checked` | **Requires type info:** no
+
+Disallows type annotations that TypeScript can infer automatically. Explicit annotations on inferred types are redundant and add noise.
+
+```typescript
+// ❌ Violation — TypeScript infers these types from the initializer
+const count: number = 0;
+const name: string = 'Alice';
+const active: boolean = true;
+
+function greet(name: string = 'world'): void {}
+
+class Timer {
+  elapsed: number = 0;
+}
+
+// ✅ Fix — let TypeScript infer
+const count = 0;
+const name = 'Alice';
+const active = true;
+
+function greet(name = 'world'): void {}
+
+class Timer {
+  elapsed = 0;
+}
+```
+
+**Options:**
+
+```json
+["error", {
+  "ignoreParameters": false,  // whether to ignore function parameters
+  "ignoreProperties": false   // whether to ignore class properties
+}]
+```
+
+---
+
+## `consistent-type-assertions`
+
+**Config:** `stylistic`, `stylistic-type-checked` | **Requires type info:** no
+
+Enforces a consistent style for type assertions. You can choose between the `as` keyword and angle-bracket syntax, and control how `object` types are asserted.
+
+```json
+["error", {
+  "assertionStyle": "as",        // "as" (default) or "angle-bracket" or "never"
+  "objectLiteralTypeAssertions": "allow" // "allow", "allow-as-const", or "never"
+}]
+```
+
+```typescript
+// With assertionStyle: "as" (default)
+const user = response.data as User;   // ✅
+const user = <User>response.data;     // ❌
+
+// With objectLiteralTypeAssertions: "never"
+const user = {} as User;              // ❌ — unsafe, misses required fields
+const user: User = {};                // ✅ — TypeScript validates the shape
+```
+
+---
+
+## `consistent-generic-constructors`
+
+**Config:** `stylistic`, `stylistic-type-checked` | **Requires type info:** no
+
+Enforces placing generic type arguments on either the constructor call or the variable declaration — not both and not neither.
+
+```json
+["error", "constructor"] // or "type-annotation"
+```
+
+<Tabs>
+  <Tab title="constructor (default)">
+    ```typescript
+    // ✅ — type argument on the constructor
+    const map = new Map<string, number>();
+
+    // ❌ — type argument on the variable annotation
+    const map: Map<string, number> = new Map();
+    ```
+  </Tab>
+  <Tab title="type-annotation">
+    ```typescript
+    // ✅ — type argument on the variable annotation
+    const map: Map<string, number> = new Map();
+
+    // ❌ — type argument on the constructor
+    const map = new Map<string, number>();
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## `adjacent-overload-signatures`
+
+**Config:** `stylistic`, `stylistic-type-checked` | **Requires type info:** no
+
+Requires function overload signatures to be adjacent to each other. Spreading overloads across other declarations makes them hard to read.
+
+```typescript
+// ❌ Violation — overloads are not adjacent
+interface Formatter {
+  format(value: string): string;
+  format(value: number): string;
+  log(message: string): void;      // unrelated declaration in between
+  format(value: string | number): string;
+}
+
+// ✅ Fix — keep overloads together
+interface Formatter {
+  format(value: string): string;
+  format(value: number): string;
+  format(value: string | number): string;
+  log(message: string): void;
+}
+```
+
+---
+
+## `prefer-for-of`
+
+**Config:** `stylistic`, `stylistic-type-checked` | **Requires type info:** no
+
+Enforces `for...of` loops instead of `for` loops when the loop index is only used to access array elements.
+
+```typescript
+const items = ['a', 'b', 'c'];
+
+// ❌ Violation — index is only used for element access
+for (let i = 0; i < items.length; i++) {
+  console.log(items[i]);
+}
+
+// ✅ Fix
+for (const item of items) {
+  console.log(item);
+}
+
+// ✅ — index is used for something else; for loop is fine
+for (let i = 0; i < items.length; i++) {
+  console.log(i, items[i]);
+}
+```
+
+---
+
+## `prefer-function-type`
+
+**Config:** `stylistic`, `stylistic-type-checked` | **Requires type info:** no
+
+Enforces using function type signatures (`(x: T) => U`) instead of callable interface members. The function type syntax is more concise.
+
+```typescript
+// ❌ Violation — single-call-signature interface
+interface Predicate {
+  (value: string): boolean;
+}
+
+// ✅ Fix — use a type alias with function type
+type Predicate = (value: string) => boolean;
+
+// ✅ — multiple signatures or non-call members are fine as interfaces
+interface EventEmitter {
+  on(event: string, handler: () => void): void;
+  off(event: string, handler: () => void): void;
+}
+```
+
+---
+
+## `no-inferrable-types` for class properties
+
+The rule also applies to class properties with initializers:
+
+```typescript
+class Config {
+  // ❌ — inferred from initializer
+  host: string = 'localhost';
+  port: number = 8080;
+  debug: boolean = false;
+
+  // ✅ — types inferred
+  host = 'localhost';
+  port = 8080;
+  debug = false;
+
+  // ✅ — annotation is necessary here (no initializer)
+  timeout: number;
+
+  constructor(timeout: number) {
+    this.timeout = timeout;
+  }
+}
+```
+
+---
+
+## `non-nullable-type-assertion-style`
+
+**Config:** `stylistic-type-checked` | **Requires type info:** yes
+
+Enforces using the `!` non-null assertion instead of `as NonNullable<T>` or `as T` when the assertion is only removing `null` and `undefined`.
+
+```typescript
+declare const name: string | null;
+
+// ❌ Violation — as assertion just removes null
+const lower = (name as string).toLowerCase();
+
+// ✅ Fix — use the non-null assertion operator
+const lower = name!.toLowerCase();
+```
+
+---
+
+## `prefer-find`
+
+**Config:** `stylistic-type-checked` | **Requires type info:** yes
+
+Enforces using `Array.find()` instead of `Array.filter()[0]`. The `find` method is more expressive and avoids creating an intermediate array.
+
+```typescript
+const users = [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }];
+
+// ❌ Violation
+const alice = users.filter(u => u.id === 1)[0];
+
+// ✅ Fix
+const alice = users.find(u => u.id === 1);
+```
+
+---
+
+## `prefer-includes`
+
+**Config:** `stylistic-type-checked` | **Requires type info:** yes
+
+Enforces using `String.includes()` or `Array.includes()` instead of `indexOf() !== -1`.
+
+```typescript
+const str = 'hello world';
+
+// ❌ Violation
+if (str.indexOf('world') !== -1) { /* ... */ }
+
+// ✅ Fix
+if (str.includes('world')) { /* ... */ }
+
+const arr = [1, 2, 3];
+
+// ❌ Violation
+if (arr.indexOf(2) !== -1) { /* ... */ }
+
+// ✅ Fix
+if (arr.includes(2)) { /* ... */ }
+```
+
+---
+
+## `prefer-string-starts-ends-with`
+
+**Config:** `stylistic-type-checked` | **Requires type info:** yes
+
+Enforces using `String.startsWith()` and `String.endsWith()` instead of regex or index-based checks.
+
+```typescript
+const str = 'hello world';
+
+// ❌ Violation
+if (str.indexOf('hello') === 0) { /* ... */ }
+if (str[0] === 'h') { /* ... */ }
+if (/^hello/.test(str)) { /* ... */ }
+if (str.slice(-5) === 'world') { /* ... */ }
+
+// ✅ Fix
+if (str.startsWith('hello')) { /* ... */ }
+if (str.endsWith('world')) { /* ... */ }
+```
+
+---
+
+## Additional stylistic rules
+
+<AccordionGroup>
+  <Accordion title="consistent-indexed-object-style">
+    Enforces using either `Record<K, V>` or an index signature `{ [key: K]: V }` consistently.
+
+    ```json
+    ["error", "record"] // or "index-signature"
+    ```
+
+    ```typescript
+    // With "record" (default)
+    type Cache = Record<string, string>;   // ✅
+    type Cache = { [key: string]: string }; // ❌
+    ```
+  </Accordion>
+
+  <Accordion title="class-literal-property-style">
+    Enforces using `readonly` fields for class properties that have literal values, instead of getter accessors.
+
+    ```typescript
+    // ❌ Violation — getter returning a literal
+    class Config {
+      get version(): string {
+        return '1.0.0';
+      }
+    }
+
+    // ✅ Fix
+    class Config {
+      readonly version = '1.0.0';
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ban-tslint-comment">
+    Disallows `// tslint:disable` and `// tslint:enable` comments. TSLint has been deprecated; use ESLint disable comments instead.
+
+    ```typescript
+    // ❌ Violation
+    // tslint:disable-next-line:no-console
+    console.log('debug');
+
+    // ✅ Fix
+    // eslint-disable-next-line no-console
+    console.log('debug');
+    ```
+  </Accordion>
+
+  <Accordion title="no-confusing-non-null-assertion">
+    Disallows using the `!` non-null assertion in positions where it is confusing — such as immediately before `=` (which looks like `!=`).
+
+    ```typescript
+    // ❌ Violation — looks like "not equal"
+    if (a! == b) { /* ... */ }
+    if (a! === b) { /* ... */ }
+
+    // ✅ Fix — add parentheses to clarify
+    if (a !== null && a === b) { /* ... */ }
+    ```
+  </Accordion>
+
+  <Accordion title="method-signature-style">
+    Enforces using property-style function signatures in interfaces and type literals instead of method-style signatures. Property style is more accurate when the method may be overridden.
+
+    ```json
+    ["error", "property"] // or "method"
+    ```
+
+    ```typescript
+    // ❌ Violation — method style
+    interface Formatter {
+      format(value: string): string;
+    }
+
+    // ✅ Fix — property style
+    interface Formatter {
+      format: (value: string) => string;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="dot-notation">
+    Enforces using dot notation instead of bracket notation for property access when the property name is a valid identifier. Requires type information to correctly handle `noPropertyAccessFromIndexSignature`.
+
+    ```typescript
+    // ❌ Violation
+    const name = user['name'];
+
+    // ✅ Fix
+    const name = user.name;
+
+    // ✅ — bracket notation is required here
+    const key = 'name';
+    const name = user[key];
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Opt-in stylistic rules (not in shared configs)
+
+These rules are not enabled by any shared config but are commonly added by teams.
+
+<AccordionGroup>
+  <Accordion title="explicit-function-return-type">
+    Requires explicit return type annotations on all functions. This is useful for teams that want all public APIs to have documented return types.
+
+    ```typescript
+    // ❌ Violation — return type is inferred
+    function getUser(id: string) {
+      return users.find(u => u.id === id);
+    }
+
+    // ✅ Fix
+    function getUser(id: string): User | undefined {
+      return users.find(u => u.id === id);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="explicit-member-accessibility">
+    Requires explicit `public`, `protected`, or `private` accessibility modifiers on class members.
+
+    ```typescript
+    class UserService {
+      // ❌ Violation — no accessibility modifier
+      db: Database;
+      getUser(id: string): User { /* ... */ }
+
+      // ✅ Fix
+      private db: Database;
+      public getUser(id: string): User { /* ... */ }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="member-ordering">
+    Enforces a consistent ordering of class members. You can configure the exact order of static/instance, public/protected/private, fields/constructors/methods.
+
+    ```json
+    ["error", {
+      "default": [
+        "static-field",
+        "instance-field",
+        "constructor",
+        "static-method",
+        "instance-method"
+      ]
+    }]
+    ```
+  </Accordion>
+
+  <Accordion title="consistent-type-exports">
+    Enforces using `export type` for exports that only export types. This is the export counterpart to `consistent-type-imports`.
+
+    ```typescript
+    // ❌ Violation — User is only a type
+    export { User, createUser } from './user';
+
+    // ✅ Fix
+    export type { User } from './user';
+    export { createUser } from './user';
+    ```
+  </Accordion>
+
+  <Accordion title="sort-type-constituents">
+    Enforces alphabetical sorting of union and intersection type members.
+
+    ```typescript
+    // ❌ Violation
+    type Status = 'pending' | 'active' | 'cancelled' | 'completed';
+
+    // ✅ Fix
+    type Status = 'active' | 'cancelled' | 'completed' | 'pending';
+    ```
+  </Accordion>
+
+  <Accordion title="no-import-type-side-effects">
+    Disallows using `import type` with side-effect-only imports. Side-effect imports (`import './setup'`) should always use the value import syntax so the side effects are not accidentally elided.
+
+    ```typescript
+    // ❌ Violation — import type cannot have side effects
+    import type './polyfills';
+
+    // ✅ Fix
+    import './polyfills';
+    ```
+  </Accordion>
+</AccordionGroup>

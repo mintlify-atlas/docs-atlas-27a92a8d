@@ -1,0 +1,137 @@
+---
+title: 'Formatting'
+description: 'Why typescript-eslint recommends against using ESLint for formatting, how to integrate Prettier, and how to migrate from TSLint.'
+---
+
+We recommend against using ESLint for formatting. Use [Prettier](https://prettier.io), [dprint](https://dprint.dev), or an equivalent dedicated formatter instead.
+
+## Formatters vs. linters
+
+**Formatters** verify and correct whitespace issues in code — spacing, newlines, and similar trivia. Formatters run very quickly because they only change whitespace, not code logic or naming.
+
+**Linters** verify and correct logical and non-whitespace style issues — naming consistency, bug detection, and similar concerns. Linters often take seconds or more because they apply many logical rules to code.
+
+### Why linters make poor formatters
+
+Linters run in a parse-check-report-fix cycle. There is significant intermediate work before a linter can fix a formatting issue. Additionally, linters run each rule in isolation, which creates two problems:
+
+- Any two lint rules cannot share config, so one rule's fixer might introduce a violation of another rule's fixer (for example, using the incorrect indentation character).
+- Lint rule fixers can conflict — applying to the same code range — forcing the linter to perform additional cycles to apply a fixer to a clean set of code.
+
+These problems make a linter significantly slower for formatting tasks, which is especially noticeable in projects that use [typed linting](/getting-started/typed-linting). Formatting via a linter is also less consistent and less capable of handling edge cases than a purpose-built formatter, and the maintenance cost of formatting-related lint rules is typically very high.
+
+Modern formatters such as Prettier apply formatting to all code regardless of original formatting. This design allows formatters to be far more comprehensive and consistent, at much lower maintenance cost.
+
+## Using Prettier with ESLint
+
+Neither typescript-eslint nor ESLint core enable any formatting-related rules in their recommended presets. However, some third-party plugin configurations may still enable them.
+
+If you see formatting rules enabled in your ESLint configuration, use [`eslint-config-prettier`](https://github.com/prettier/eslint-config-prettier) to disable all formatting rules in your ESLint config, then configure your formatter separately.
+
+Add `eslint-config-prettier` at the end of your `extends`:
+
+<Tabs>
+  <Tab title="Flat Config">
+    ```js title="eslint.config.mjs"
+    // @ts-check
+
+    import js from '@eslint/js';
+    import { defineConfig } from 'eslint/config';
+    import someOtherConfig from 'eslint-config-other-configuration-that-enables-formatting-rules';
+    import prettierConfig from 'eslint-config-prettier';
+    import tseslint from 'typescript-eslint';
+
+    export default defineConfig(
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      someOtherConfig,
+      // Add this line — must be last
+      prettierConfig,
+    );
+    ```
+  </Tab>
+  <Tab title="Legacy Config">
+    ```js title=".eslintrc.js"
+    /* eslint-env node */
+    module.exports = {
+      extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended',
+        'other-configuration-that-enables-formatting-rules',
+        // Add this line — must be last
+        'prettier',
+      ],
+      parser: '@typescript-eslint/parser',
+      plugins: ['@typescript-eslint'],
+      root: true,
+    };
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Even if you use a formatter other than Prettier, you can use `eslint-config-prettier` — it exclusively turns **off** formatting rules and doesn't depend on Prettier itself.
+</Note>
+
+### `eslint-config-prettier` vs. `eslint-plugin-prettier`
+
+These are two different packages with different purposes:
+
+- **`eslint-config-prettier`** (recommended): Only disables formatting rules from ESLint core and other plugins. Use this to prevent ESLint and Prettier from conflicting.
+- **`eslint-plugin-prettier`**: Loads and runs Prettier inside ESLint, surfacing formatting differences as lint errors. This causes every file to be parsed twice — once by ESLint, once by Prettier — which adds up in large codebases.
+
+If you use `eslint-plugin-prettier`, consider using Prettier's `--check` flag instead, which runs faster:
+
+```bash
+npx prettier --check .
+```
+
+See [Prettier's `--check` docs](https://prettier.io/docs/en/cli#--check) for more details.
+
+## ESLint core's stance on formatting
+
+Most lint rules fall into one of three categories:
+
+- **Logical**: Rules about runtime behavior (missing `await`s, invalid logical checks, etc.).
+- **Stylistic**: Rules about style concerns that don't impact runtime behavior — mostly naming or which equivalent syntax to use (function declarations vs. arrow functions).
+  - **Formatting**: Stylistic rules that only care about trivia (semicolons, whitespace, etc.) without impacting runtime behavior. These conflict with dedicated formatters.
+
+Per [ESLint's 2020 Changes to Rule Policies blog post](https://eslint.org/blog/2020/05/changes-to-rules-policies#what-are-the-changes), ESLint has moved away from stylistic rules, including formatting rules:
+
+> Stylistic rules are frozen — we won't be adding any more options to stylistic rules. We've learned that there's no way to satisfy everyone's personal preferences, and most of the rules already have a lot of difficult-to-understand options.
+
+We mirror ESLint's move away from formatting and stylistic rules. With the exception of bug fixes, no new formatting- or stylistic-related pull requests will be accepted into typescript-eslint.
+
+<Note>
+  The [`stylistic` configurations](/configuration/shared-configs) are not deprecated or recommended against. We'll continue to include those configs and their rules to help enforce TypeScript-related stylistic consistency.
+</Note>
+
+## Alternative: `eslint-stylistic`
+
+If you strongly prefer not to use a dedicated formatter, the [`eslint-stylistic`](https://eslint.style) project provides an ESLint plugin containing formatting and stylistic rules. It can serve as your formatter within ESLint.
+
+See [ESLint Stylistic > Why?](https://eslint.style/guide/why) for the project's motivation, and [ESLint Stylistic > Getting Started](https://eslint.style/guide/getting-started) for setup instructions.
+
+---
+
+## Migrating from TSLint
+
+TSLint was a linter written specifically for TypeScript code. **TSLint is deprecated** — use typescript-eslint instead.
+
+<AccordionGroup>
+  <Accordion title="How do I migrate from TSLint to typescript-eslint?">
+    The standard tool for converting a TSLint configuration to an equivalent ESLint configuration is [`tslint-to-eslint-config`](https://github.com/typescript-eslint/tslint-to-eslint-config). If you are still using TSLint, we strongly recommend using this tool to switch.
+
+    You can also consult the [TSLint rule alternatives list](https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/TSLINT_RULE_ALTERNATIVES.md) for an up-to-date overview of how TSLint rules compare to typescript-eslint rules.
+
+    If you need to run both linters simultaneously during a transition period, you can use TSLint within ESLint via [`@typescript-eslint/eslint-plugin-tslint`](https://typescript-eslint.io/packages/eslint-plugin-tslint).
+  </Accordion>
+
+  <Accordion title="Why was TSLint deprecated?">
+    One advantage TSLint had over ESLint was that it worked directly on TypeScript code without needing tooling to reconcile differences between JavaScript and TypeScript syntax. However, that meant TSLint couldn't reuse any of the existing work done in the JavaScript ecosystem around ESLint. TSLint had to reimplement everything from editor extensions to auto-fixing to rules.
+
+    In 2019, TSLint's backers announced they would deprecate TSLint in favor of supporting typescript-eslint, to benefit the broader community. You can read more at [TSLint in 2019](https://medium.com/palantir/tslint-in-2019-1a144c2317a9).
+
+    The TypeScript team also migrated the TypeScript codebase from TSLint to typescript-eslint and has been a supporter of this project. See [microsoft/TypeScript#30553](https://github.com/microsoft/TypeScript/issues/30553) for details.
+  </Accordion>
+</AccordionGroup>

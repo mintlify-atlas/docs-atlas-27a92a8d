@@ -1,0 +1,357 @@
+---
+title: 'Building ESLint plugins'
+description: 'How to create and distribute an ESLint plugin that supports TypeScript and typed linting using typescript-eslint.'
+keywords: ['ESLint plugin', 'typescript-eslint', 'plugin', 'custom rules', 'typed linting', 'RuleCreator']
+---
+
+Building an ESLint plugin that supports TypeScript follows the same general structure as any ESLint plugin. The differences are limited to package dependencies, how you create rules, and how you expose typed linting configs.
+
+<Note>
+You should be comfortable writing custom rules before building a plugin. See [Building custom rules](/developers/custom-rules) for the prerequisite background. For a complete reference example, see [eslint-plugin-example-typed-linting](https://github.com/typescript-eslint/examples/tree/main/packages/eslint-plugin-example-typed-linting).
+</Note>
+
+## Package setup
+
+Follow [ESLint's plugin creation guide](https://eslint.org/docs/latest/extend/plugins#creating-a-plugin) to scaffold the plugin. The sections below describe the additional requirements for TypeScript and typed linting support.
+
+### `package.json` dependencies
+
+Keep all `@typescript-eslint/*` and `typescript-eslint` packages at the same semver version range. For example, set each to `^8.1.2` or `^7.12.0 || ^8.0.0`.
+
+<Tabs>
+  <Tab title="dependencies">
+    ```json
+    {
+      "dependencies": {
+        "@typescript-eslint/utils": "^8.1.2"
+      }
+    }
+    ```
+
+    `@typescript-eslint/utils` is required to create rules with `RuleCreator`. It must be a production dependency because it ships as part of your plugin's runtime.
+  </Tab>
+  <Tab title="devDependencies">
+    ```json
+    {
+      "devDependencies": {
+        "@typescript-eslint/rule-tester": "^8.1.2",
+        "typescript": "^5.0.0"
+      }
+    }
+    ```
+
+    `@typescript-eslint/rule-tester` is strongly recommended for testing rules. `typescript` is needed at development time for type checking your plugin source.
+  </Tab>
+  <Tab title="peerDependencies">
+    ```json
+    {
+      "peerDependencies": {
+        "@typescript-eslint/parser": "^8.1.2",
+        "eslint": "^9.0.0",
+        "typescript": ">=4.7.4"
+      }
+    }
+    ```
+
+    Declare peer dependencies on packages that consumers are expected to install themselves. Do **not** declare a peer dependency on `typescript-eslint` or `@typescript-eslint/eslint-plugin` — the setup guide ensures the parser is registered automatically.
+  </Tab>
+</Tabs>
+
+## Setting up `RuleCreator`
+
+Create a shared `RuleCreator` factory in a `utils.ts` file that all rules in your plugin import from. This factory encodes your plugin's documentation URL pattern and any extra doc properties you want to track on each rule.
+
+We recommend including at least these three properties in your plugin's docs type:
+
+- `description` — a succinct description of what the rule does
+- `recommended` — whether the rule is included in your plugin's `recommended` config
+- `requiresTypeChecking` — whether the rule uses type information (used by documentation generators like [`eslint-doc-generator`](https://github.com/bmish/eslint-doc-generator))
+
+```typescript
+// src/utils.ts
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+export interface MyPluginDocs {
+  description: string;
+  recommended?: boolean;
+  requiresTypeChecking?: boolean;
+}
+
+export const createRule = ESLintUtils.RuleCreator<MyPluginDocs>(
+  name =>
+    `https://github.com/your-org/eslint-plugin-example/tree/main/docs/${name}.md`,
+);
+```
+
+## Writing a rule
+
+Each rule is a separate file. Import `createRule` from your shared `utils.ts`:
+
+```typescript
+// src/rules/no-unsafe-assignment.ts
+import { ESLintUtils } from '@typescript-eslint/utils';
+import * as ts from 'typescript';
+
+import { createRule } from '../utils';
+
+export const noUnsafeAssignment = createRule({
+  name: 'no-unsafe-assignment',
+  meta: {
+    type: 'problem',
+    docs: {
+      description: 'Disallow assignments with an unsafe type.',
+      recommended: true,
+      requiresTypeChecking: true,
+    },
+    messages: {
+      unsafeAssignment: 'Unsafe assignment of an {{type}} typed value.',
+    },
+    schema: [],
+  },
+  defaultOptions: [],
+  create(context) {
+    return {
+      AssignmentExpression(node) {
+        const services = ESLintUtils.getParserServices(context);
+        const type = services.getTypeAtLocation(node.right);
+
+        if (type.flags & ts.TypeFlags.Any) {
+          context.report({
+            messageId: 'unsafeAssignment',
+            node,
+            data: { type: 'any' },
+          });
+        }
+      },
+    };
+  },
+});
+```
+
+## Plugin structure
+
+The main plugin entry point exports a `rules` object and any shared configs. A typical layout looks like this:
+
+```
+eslint-plugin-example/
+├── src/
+│   ├── index.ts          # Plugin entry point
+│   ├── utils.ts          # Shared createRule factory
+│   └── rules/
+│       ├── rule-one.ts
+│       └── rule-two.ts
+├── package.json
+└── tsconfig.json
+```
+
+### Plugin entry point
+
+```typescript
+// src/index.ts
+import type { TSESLint } from '@typescript-eslint/utils';
+
+import { noUnsafeAssignment } from './rules/no-unsafe-assignment';
+
+const rules = {
+  'no-unsafe-assignment': noUnsafeAssignment,
+} satisfies Record<string, TSESLint.RuleModule<string, unknown[]>>;
+
+const recommendedRules = Object.fromEntries(
+  Object.entries(rules)
+    .filter(([, rule]) => rule.meta.docs?.recommended)
+    .map(([name]) => [`example/${name}`, 'error']),
+);
+
+const plugin = {
+  meta: {
+    name: 'eslint-plugin-example',
+    version: '1.0.0',
+  },
+  rules,
+  configs: {} as Record<string, TSESLint.FlatConfig.Config>,
+};
+
+// Populate configs after defining the plugin so we can reference it
+Object.assign(plugin.configs, {
+  recommended: {
+    plugins: { example: plugin },
+    rules: recommendedRules,
+  },
+  recommendedTypeChecked: {
+    plugins: { example: plugin },
+    rules: {
+      ...recommendedRules,
+      // add type-checked rules here
+    },
+  },
+});
+
+export = plugin;
+```
+
+## Typed linting configs
+
+Most plugins export a `recommended` config. The challenge with typed linting is that not all users can or want to enable it.
+
+You have two options:
+
+<Tabs>
+  <Tab title="Single config (requires types)">
+    If all your rules use type information, have `recommended` require typed linting:
+
+    ```typescript
+    recommended: {
+      plugins: { example: plugin },
+      languageOptions: {
+        parserOptions: {
+          projectService: true,
+        },
+      },
+      rules: recommendedRules,
+    },
+    ```
+
+    Document clearly in your README that this config requires `@typescript-eslint/parser` and a valid `tsconfig.json`.
+  </Tab>
+  <Tab title="Two configs (recommended + typed)">
+    Expose separate `recommended` and `recommendedTypeChecked` configs so users can opt into typed linting incrementally:
+
+    ```typescript
+    configs: {
+      recommended: {
+        plugins: { example: plugin },
+        rules: {
+          'example/no-basic-rule': 'error',
+        },
+      },
+      recommendedTypeChecked: {
+        plugins: { example: plugin },
+        rules: {
+          'example/no-basic-rule': 'error',
+          'example/no-unsafe-assignment': 'error',
+        },
+      },
+    },
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+Per [Building custom rules — conditional type information](/developers/custom-rules#avoiding-conditional-type-logic), individual rules should not silently change behavior based on whether type information is available. Make the distinction explicit in your configs instead.
+</Note>
+
+## Testing plugin rules
+
+Use `@typescript-eslint/rule-tester` for all rule tests. The `RuleTester` requires the same `parserOptions` as your users will configure.
+
+```typescript
+// src/rules/no-unsafe-assignment.test.ts
+import { RuleTester } from '@typescript-eslint/rule-tester';
+import { noUnsafeAssignment } from './no-unsafe-assignment';
+
+const ruleTester = new RuleTester({
+  languageOptions: {
+    parserOptions: {
+      projectService: {
+        allowDefaultProject: ['*.ts*'],
+      },
+      tsconfigRootDir: __dirname,
+    },
+  },
+});
+
+ruleTester.run('no-unsafe-assignment', noUnsafeAssignment, {
+  valid: [
+    { code: 'const x: string = "hello";' },
+  ],
+  invalid: [
+    {
+      code: 'const x = JSON.parse("{}");',
+      errors: [{ messageId: 'unsafeAssignment' }],
+    },
+  ],
+});
+```
+
+## Publishing the plugin
+
+<Steps>
+  <Step title="Build the plugin">
+    Compile TypeScript to JavaScript. Your `package.json` `main` field should point to the compiled output:
+
+    ```json
+    {
+      "main": "dist/index.js",
+      "types": "dist/index.d.ts"
+    }
+    ```
+  </Step>
+  <Step title="Add a README">
+    Document how to install and configure your plugin. Include:
+    - Installation instructions
+    - ESLint configuration example (both `recommended` and `recommendedTypeChecked` if applicable)
+    - A table of all rules with their descriptions and whether they require type checking
+  </Step>
+  <Step title="Publish to npm">
+    ```bash
+    npm publish
+    ```
+
+    Follow the [npm publishing guide](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages) if publishing as a scoped package.
+  </Step>
+</Steps>
+
+## Consuming the plugin
+
+Users install and configure the plugin in their `eslint.config.js`:
+
+```javascript
+// eslint.config.js
+import { defineConfig } from 'eslint/config';
+import tseslint from 'typescript-eslint';
+import examplePlugin from 'eslint-plugin-example';
+
+export default defineConfig(
+  // for rules that don't require type information
+  examplePlugin.configs.recommended,
+
+  // for rules that do require type information
+  {
+    ...examplePlugin.configs.recommendedTypeChecked,
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+);
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Always document requiresTypeChecking">
+    Set `requiresTypeChecking: true` in `meta.docs` for every rule that calls `getParserServices`. This lets documentation generators like `eslint-doc-generator` automatically indicate which rules require type information.
+  </Accordion>
+  <Accordion title="Keep all @typescript-eslint packages at the same version">
+    Using mismatched versions of `@typescript-eslint/utils`, `@typescript-eslint/parser`, and related packages causes subtle type and runtime errors. Pin them to the same semver range.
+  </Accordion>
+  <Accordion title="Provide both valid and invalid test cases">
+    Include at minimum one valid and one invalid test case per rule. Aim for one reported error per invalid case so that test failure messages are easy to trace.
+  </Accordion>
+  <Accordion title="Use meta.defaultOptions instead of the deprecated defaultOptions">
+    The top-level `defaultOptions` property on rule modules is deprecated. Prefer `meta.defaultOptions` for new rules.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Building custom rules" icon="wrench" href="/developers/custom-rules">
+    Deep dive into rule creation, options, and typed rule logic.
+  </Card>
+  <Card title="AST extensions" icon="code" href="/developers/ast-extensions">
+    Reference for TypeScript-specific AST node types and selectors.
+  </Card>
+</CardGroup>

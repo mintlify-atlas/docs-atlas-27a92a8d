@@ -1,0 +1,276 @@
+---
+title: '@typescript-eslint/type-utils'
+description: 'Type-level utilities for working with TypeScript types inside ESLint rules — readonly checks, unsafe assignment detection, type predicates, and more.'
+keywords: ['typescript-eslint', 'type-utils', 'isTypeReadonly', 'isUnsafeAssignment', 'type predicates', 'custom rules', 'type-aware linting']
+---
+
+`@typescript-eslint/type-utils` provides utility functions for inspecting TypeScript types from within ESLint rules. It is used by typescript-eslint's own type-aware rules and is available for use in custom rules that need to reason about the types of AST nodes.
+
+<Tip>
+  This package requires type information to be available at lint time. Make sure you have [typed linting](/getting-started/typed-linting) configured before using these utilities.
+</Tip>
+
+## When to use this package
+
+Use `@typescript-eslint/type-utils` when your rule needs to:
+
+- Check whether a type is readonly, nullable, `any`, `unknown`, or `never`
+- Detect unsafe assignments of `any` into typed positions
+- Work with type flags or built-in type symbols
+- Retrieve contextual or constrained types for an AST node
+
+For AST-level operations that do not require type information, use [`@typescript-eslint/utils`](/packages/utils) instead. The two packages are intentionally separated so that `@typescript-eslint/utils` does not take on a hard dependency on `typescript`.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install --save-dev @typescript-eslint/type-utils
+```
+
+```bash yarn
+yarn add --dev @typescript-eslint/type-utils
+```
+
+```bash pnpm
+pnpm add --save-dev @typescript-eslint/type-utils
+```
+
+</CodeGroup>
+
+<Note>
+  `@typescript-eslint/type-utils` has a peer dependency on `typescript`. Make sure TypeScript is installed in your project.
+</Note>
+
+## Exports
+
+| Export                           | Description                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `isTypeReadonly`                 | Returns `true` if a type is deeply readonly.                                                      |
+| `isUnsafeAssignment`             | Detects assignments of `any` into a non-`any` type, including inside generic positions.           |
+| `isNullableType`                 | Returns `true` if the type accepts `null`, `undefined`, `void`, `any`, or `unknown`.              |
+| `isTypeAnyType`                  | Returns `true` if the type is `any`.                                                              |
+| `isTypeNeverType`                | Returns `true` if the type is `never`.                                                            |
+| `isTypeUnknownType`              | Returns `true` if the type is `unknown`.                                                          |
+| `isTypeAnyArrayType`             | Returns `true` if the type is `any[]`.                                                            |
+| `isTypeUnknownArrayType`         | Returns `true` if the type is `unknown[]`.                                                        |
+| `isTypeArrayTypeOrUnionOfArrayTypes` | Returns `true` if the type is an array type or a union made up solely of array types.         |
+| `isTypeReferenceType`            | Returns `true` if the type is a `TypeReference`.                                                  |
+| `typeIsOrHasBaseType`            | Returns `true` if a type is an instance of, or extends, a given parent type.                      |
+| `isTypeBigIntLiteralType`        | Returns `true` if the type is a `bigint` literal.                                                 |
+| `isTypeTemplateLiteralType`      | Returns `true` if the type is a template literal type.                                            |
+| `isTypeBrandedLiteralLike`       | Returns `true` if the type is a branded (tagged) literal.                                         |
+| `isSymbolFromDefaultLibrary`     | Returns `true` if a symbol originates from TypeScript's default library.                          |
+| `getConstrainedTypeAtLocation`   | Returns the constrained type for an AST node, resolving type parameters where possible.           |
+| `getContextualType`              | Returns the contextual type for an expression node (what TypeScript expects it to be).            |
+| `getDeclaration`                 | Returns the declaration node for a symbol.                                                        |
+| `getTypeName`                    | Returns the string name of a type.                                                                |
+| `requiresQuoting`                | Returns `true` if a property name must be quoted.                                                 |
+| `TypeOrValueSpecifier`           | Type and schema for specifying a type by name, from a package, or matched by regex.               |
+| `isTypeFlagSet`                  | Returns `true` if a given `ts.TypeFlags` bit is set on the type.                                  |
+| `containsAllTypesByName`         | Returns `true` if every constituent of a union/intersection matches the given names.              |
+| `discriminateAnyType`            | Identifies which "kind" of `any` a type is.                                                       |
+| `getDecorators`                  | Re-exported from `@typescript-eslint/typescript-estree`. Returns decorator nodes for a TS node.   |
+| `getModifiers`                   | Re-exported from `@typescript-eslint/typescript-estree`. Returns modifier nodes for a TS node.    |
+
+## `isTypeReadonly`
+
+Checks whether a TypeScript type is deeply readonly. A type is considered readonly when all of its properties (and their nested types) are marked `readonly`, all array/tuple type arguments are readonly, and index signatures are readonly.
+
+```ts
+import { isTypeReadonly } from '@typescript-eslint/type-utils';
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+const createRule = ESLintUtils.RuleCreator(name => `https://example.com/${name}`);
+
+export const rule = createRule({
+  name: 'prefer-readonly-types',
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'Require function parameters to use readonly types.',
+      requiresTypeChecking: true,
+    },
+    messages: {
+      shouldBeReadonly: 'Parameter type should be readonly.',
+    },
+    schema: [],
+  },
+  defaultOptions: [],
+  create(context) {
+    const services = ESLintUtils.getParserServices(context);
+    const checker = services.program.getTypeChecker();
+
+    return {
+      'FunctionDeclaration > Identifier.params'(node) {
+        const tsNode = services.esTreeNodeToTSNodeMap.get(node);
+        const type = checker.getTypeAtLocation(tsNode);
+
+        if (!isTypeReadonly(services.program, type)) {
+          context.report({ node, messageId: 'shouldBeReadonly' });
+        }
+      },
+    };
+  },
+});
+```
+
+### `ReadonlynessOptions`
+
+`isTypeReadonly` accepts an optional options object:
+
+```ts
+export interface ReadonlynessOptions {
+  /**
+   * Types that should be treated as readonly even if they are not.
+   * Accepts TypeOrValueSpecifier objects.
+   */
+  readonly allow?: TypeOrValueSpecifier[];
+
+  /**
+   * When true, methods on an object type are treated as readonly properties.
+   * Defaults to false.
+   */
+  readonly treatMethodsAsReadonly?: boolean;
+}
+```
+
+```ts
+isTypeReadonly(program, type, {
+  treatMethodsAsReadonly: true,
+  allow: [{ from: 'lib', name: 'Map' }],
+});
+```
+
+## `isUnsafeAssignment`
+
+Detects whether assigning `type` into `receiver` is unsafe because it involves propagating `any` into a typed position. This check recurses into generic type arguments to catch unsafe sub-assignments.
+
+```ts
+function isUnsafeAssignment(
+  type: ts.Type,
+  receiver: ts.Type,
+  checker: ts.TypeChecker,
+  senderNode: TSESTree.Node | null,
+): false | { receiver: ts.Type; sender: ts.Type }
+```
+
+Returns `false` if the assignment is safe, or `{ receiver, sender }` if the assignment is unsafe.
+
+```ts
+import { isUnsafeAssignment } from '@typescript-eslint/type-utils';
+import { ESLintUtils } from '@typescript-eslint/utils';
+
+// Inside a rule's create() function:
+const services = ESLintUtils.getParserServices(context);
+const checker = services.program.getTypeChecker();
+
+const senderType = checker.getTypeAtLocation(
+  services.esTreeNodeToTSNodeMap.get(senderNode),
+);
+const receiverType = checker.getTypeAtLocation(
+  services.esTreeNodeToTSNodeMap.get(receiverNode),
+);
+
+const result = isUnsafeAssignment(senderType, receiverType, checker, senderNode);
+if (result) {
+  context.report({
+    node: senderNode,
+    messageId: 'unsafeAssignment',
+    data: {
+      sender: checker.typeToString(result.sender),
+      receiver: checker.typeToString(result.receiver),
+    },
+  });
+}
+```
+
+<Note>
+  `isUnsafeAssignment` treats `any => unknown` as safe, since `unknown` is intentionally wide. It also handles the common `new Map()` case, which TypeScript types as `Map<any, any>` for an empty constructor.
+</Note>
+
+## Type predicates
+
+These functions accept a `ts.Type` (and sometimes a `ts.TypeChecker`) and return a boolean:
+
+```ts
+import {
+  isNullableType,
+  isTypeAnyType,
+  isTypeNeverType,
+  isTypeUnknownType,
+  isTypeAnyArrayType,
+  isTypeUnknownArrayType,
+  isTypeArrayTypeOrUnionOfArrayTypes,
+  typeIsOrHasBaseType,
+} from '@typescript-eslint/type-utils';
+
+// Primitive checks
+isNullableType(type);                              // null | undefined | void | any | unknown
+isTypeAnyType(type);                               // any
+isTypeNeverType(type);                             // never
+isTypeUnknownType(type);                           // unknown
+
+// Array checks
+isTypeAnyArrayType(type, checker);                 // any[]
+isTypeUnknownArrayType(type, checker);             // unknown[]
+isTypeArrayTypeOrUnionOfArrayTypes(type, checker); // T[] | U[] (every constituent is an array)
+
+// Inheritance
+typeIsOrHasBaseType(type, parentType);             // type is or extends parentType
+```
+
+## `getConstrainedTypeAtLocation`
+
+Returns the type at an AST node's location with type parameter constraints applied. Useful when the raw type is a generic `T` but you want to inspect what `T` is constrained to.
+
+```ts
+import { getConstrainedTypeAtLocation } from '@typescript-eslint/type-utils';
+
+const type = getConstrainedTypeAtLocation(services, node);
+```
+
+## `getContextualType`
+
+Returns the **contextual** type that TypeScript expects for an expression — in other words, what type the surrounding code requires. For example, for the expression `42` in `const x: string = 42`, the contextual type would be `string`.
+
+```ts
+import { getContextualType } from '@typescript-eslint/type-utils';
+
+const contextual = getContextualType(checker, expressionNode);
+```
+
+## `TypeOrValueSpecifier`
+
+A union type and companion JSON Schema for specifying types by name, origin package, or regex pattern. Used by `isTypeReadonly`, `containsAllTypesByName`, and several rules in the plugin.
+
+```ts
+type TypeOrValueSpecifier =
+  | string
+  | {
+      from: 'file';
+      name: string | string[];
+      path?: string;
+    }
+  | {
+      from: 'lib';
+      name: string | string[];
+    }
+  | {
+      from: 'package';
+      name: string | string[];
+      package: string;
+    };
+```
+
+Example — allow specific types from a package in `isTypeReadonly` options:
+
+```ts
+isTypeReadonly(program, type, {
+  allow: [
+    { from: 'package', name: 'Immutable', package: 'immutable' },
+    { from: 'lib', name: 'ReadonlyMap' },
+  ],
+});
+```

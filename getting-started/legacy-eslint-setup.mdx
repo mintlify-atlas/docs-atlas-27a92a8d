@@ -1,0 +1,135 @@
+---
+title: 'Legacy ESLint setup'
+description: 'Set up typescript-eslint using the legacy .eslintrc.* config format for ESLint v8 and below.'
+keywords: ['legacy config', 'eslintrc', 'typescript-eslint', 'eslint v8', 'setup']
+---
+
+<Warning>
+  This page covers [ESLint's legacy config format](https://eslint.org/docs/latest/use/configure/configuration-files-deprecated) (`.eslintrc.*`), which is deprecated as of ESLint v9. For new projects, use the flat config format instead — see [Quickstart](/getting-started/quickstart).
+</Warning>
+
+## Setup
+
+<Steps>
+  <Step title="Install packages">
+    Install [ESLint](https://eslint.org), [TypeScript](https://typescriptlang.org), and the required typescript-eslint packages:
+
+    <CodeGroup>
+
+    ```bash npm
+    npm install --save-dev @typescript-eslint/parser @typescript-eslint/eslint-plugin eslint typescript
+    ```
+
+    ```bash yarn
+    yarn add --dev @typescript-eslint/parser @typescript-eslint/eslint-plugin eslint typescript
+    ```
+
+    ```bash pnpm
+    pnpm add --save-dev @typescript-eslint/parser @typescript-eslint/eslint-plugin eslint typescript
+    ```
+
+    </CodeGroup>
+
+    The legacy setup uses the individual `@typescript-eslint/parser` and `@typescript-eslint/eslint-plugin` packages directly, rather than the combined `typescript-eslint` entry point.
+  </Step>
+
+  <Step title="Create your ESLint config">
+    Create a `.eslintrc.cjs` file in the root of your project:
+
+    ```js .eslintrc.cjs
+    /* eslint-env node */
+    module.exports = {
+      extends: ['eslint:recommended', 'plugin:@typescript-eslint/recommended'],
+      parser: '@typescript-eslint/parser',
+      plugins: ['@typescript-eslint'],
+      root: true,
+    };
+    ```
+
+    <Info>
+      If your project does not use ES modules, you can name the file `.eslintrc.js` instead. See [ESLint's configuration files docs](https://eslint.org/docs/user-guide/configuring/configuration-files) for details on naming conventions.
+    </Info>
+  </Step>
+
+  <Step title="Run ESLint">
+    Open a terminal at the root of your project and run:
+
+    <CodeGroup>
+
+    ```bash npm
+    npx eslint .
+    ```
+
+    ```bash yarn
+    yarn eslint .
+    ```
+
+    ```bash pnpm
+    pnpm eslint .
+    ```
+
+    </CodeGroup>
+
+    ESLint will lint all TypeScript-compatible files in the current directory and print results to your terminal.
+  </Step>
+</Steps>
+
+## Configuration details
+
+Each field in the config above serves a specific purpose:
+
+- **`parser: '@typescript-eslint/parser'`** — Tells ESLint to use [`@typescript-eslint/parser`](/packages/parser) to parse your source files. This is required; without it, ESLint will throw errors when it encounters TypeScript-specific syntax like generics or type annotations.
+
+- **`plugins: ['@typescript-eslint']`** — Loads the [`@typescript-eslint/eslint-plugin`](/packages/eslint-plugin) package, making all typescript-eslint rules available in your config.
+
+- **`extends: [...]`** — Enables pre-built rule sets:
+  - `eslint:recommended` — ESLint's built-in recommended config: a small, curated set of rules for well-known JavaScript best practices.
+  - `plugin:@typescript-eslint/recommended` — typescript-eslint's recommended config: TypeScript-specific rules similar in spirit to `eslint:recommended`.
+
+- **`root: true`** — Marks this file as the root config for the project. ESLint will not search for config files in parent directories beyond this point. This is a broadly recommended ESLint practice.
+
+## Additional configurations
+
+Consider enabling these configs for a stronger baseline:
+
+- **`strict`** — A superset of `recommended` with more opinionated rules that can also catch bugs.
+- **`stylistic`** — Additional rules that enforce consistent code style without changing logic.
+
+```js .eslintrc.cjs
+/* eslint-env node */
+module.exports = {
+  extends: [
+    'eslint:recommended',
+    // Remove this line
+    'plugin:@typescript-eslint/recommended',
+    // Add these lines
+    'plugin:@typescript-eslint/strict',
+    'plugin:@typescript-eslint/stylistic',
+  ],
+  parser: '@typescript-eslint/parser',
+  plugins: ['@typescript-eslint'],
+  root: true,
+};
+```
+
+Read more in the [shared configurations docs](/configuration/shared-configs).
+
+## Typed linting
+
+typescript-eslint also provides rules that use TypeScript's type checker for deeper analysis. To enable them with the legacy config format, see [Typed Linting](/getting-started/typed-linting).
+
+## Migrating to flat config
+
+ESLint's flat config format (`eslint.config.mjs`) is the current standard and offers a simpler, more predictable configuration model. If you're starting a new project or can migrate, the flat config setup is recommended.
+
+See the [Quickstart](/getting-started/quickstart) for the flat config equivalent of this setup.
+
+## Troubleshooting
+
+If you're having problems, see our [Troubleshooting & FAQs](/troubleshooting/faqs).
+
+**Additional documentation:**
+
+- [Configuring ESLint](https://eslint.org/docs/user-guide/configuring) — ESLint's official configuration guide.
+- [ESLint rules](https://eslint.org/docs/rules/) — Reference for all ESLint built-in rules.
+- [typescript-eslint rules](/rules/overview) — Reference for all typescript-eslint rules.

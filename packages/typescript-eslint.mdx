@@ -1,0 +1,252 @@
+---
+title: "typescript-eslint"
+description: "The unified entry point for using TypeScript with ESLint. Bundles the parser, plugin, and shared configs into a single package."
+keywords: ["typescript-eslint", "eslint", "typescript", "parser", "plugin", "flat config"]
+---
+
+## Overview
+
+`typescript-eslint` is the main package you install to lint TypeScript code with ESLint. It re-exports the parser, plugin, and all shared configs from a single entry point so you don't need to manage multiple packages separately.
+
+<CardGroup cols={2}>
+  <Card title="parser" icon="code" href="/packages/parser">
+    Re-exports `@typescript-eslint/parser` — the ESLint-compatible TypeScript parser.
+  </Card>
+  <Card title="eslint-plugin" icon="plug" href="/packages/eslint-plugin">
+    Re-exports `@typescript-eslint/eslint-plugin` — the rules and config presets.
+  </Card>
+</CardGroup>
+
+### Exports
+
+| Name      | Description                                                                                                 |
+| --------- | ----------------------------------------------------------------------------------------------------------- |
+| `config`  | *(Deprecated)* Type-safe flat config helper. Use ESLint's `defineConfig(...)` instead.                     |
+| `configs` | All shared ESLint flat config presets (`recommended`, `strict`, `stylistic`, and their type-checked variants). |
+| `parser`  | Re-export of `@typescript-eslint/parser`.                                                                   |
+| `plugin`  | Re-export of `@typescript-eslint/eslint-plugin`.                                                            |
+| `FlatConfig` | Re-export of the `FlatConfig` type from `@typescript-eslint/utils`.                                      |
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install --save-dev typescript-eslint
+```
+
+```bash yarn
+yarn add --dev typescript-eslint
+```
+
+```bash pnpm
+pnpm add --save-dev typescript-eslint
+```
+
+</CodeGroup>
+
+<Note>
+  If you previously installed `@typescript-eslint/parser` and `@typescript-eslint/eslint-plugin` separately, you can remove them — `typescript-eslint` includes both as dependencies.
+
+  ```bash
+  npm uninstall @typescript-eslint/parser @typescript-eslint/eslint-plugin
+  ```
+</Note>
+
+## Usage
+
+### Recommended setup
+
+The simplest setup uses ESLint's `defineConfig` helper together with the shared configs exported from this package:
+
+```js title="eslint.config.mjs"
+// @ts-check
+
+import js from '@eslint/js';
+import { defineConfig } from 'eslint/config';
+import tseslint from 'typescript-eslint';
+
+export default defineConfig(
+  js.configs.recommended,
+  tseslint.configs.recommended,
+);
+```
+
+### Named imports (ESM)
+
+```ts title="eslint.config.mjs"
+import { defineConfig } from 'eslint/config';
+import { parser, plugin, configs } from 'typescript-eslint';
+
+export default defineConfig(
+  {
+    languageOptions: { parser },
+    plugins: { '@typescript-eslint': plugin },
+  },
+  ...configs.recommended,
+);
+```
+
+### CommonJS
+
+```js title="eslint.config.js"
+const { defineConfig } = require('eslint/config');
+const tseslint = require('typescript-eslint');
+
+module.exports = defineConfig(
+  ...tseslint.configs.recommended,
+);
+```
+
+### Manually configuring the plugin and parser
+
+The shared configs set the parser and plugin for you. For more complex setups where you need manual control:
+
+```js title="eslint.config.mjs"
+// @ts-check
+
+import js from '@eslint/js';
+import { defineConfig } from 'eslint/config';
+import tseslint from 'typescript-eslint';
+
+export default defineConfig({
+  plugins: {
+    '@typescript-eslint': tseslint.plugin,
+  },
+  languageOptions: {
+    parser: tseslint.parser,
+    parserOptions: {
+      projectService: true,
+    },
+  },
+  rules: {
+    '@typescript-eslint/no-floating-promises': 'error',
+  },
+});
+```
+
+<Warning>
+  Use `@typescript-eslint` as the plugin namespace. The shared configs depend on this namespace, and it has been the standard for many years.
+</Warning>
+
+### Usage with other plugins
+
+A more complex example that combines typescript-eslint with another plugin and controls which files get type-aware linting:
+
+```js title="eslint.config.mjs"
+// @ts-check
+
+import js from '@eslint/js';
+import { defineConfig } from 'eslint/config';
+import jestPlugin from 'eslint-plugin-jest';
+import tseslint from 'typescript-eslint';
+
+export default defineConfig(
+  {
+    ignores: ['**/build/**', '**/dist/**'],
+  },
+  js.configs.recommended,
+  {
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+      jest: jestPlugin,
+    },
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: true,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+    },
+  },
+  {
+    // disable type-aware linting on JS files
+    files: ['**/*.js'],
+    extends: [tseslint.configs.disableTypeChecked],
+  },
+  {
+    // enable jest rules on test files only
+    files: ['test/**'],
+    extends: [jestPlugin.configs['flat/recommended']],
+  },
+);
+```
+
+## Available configs
+
+All configs are accessed via `tseslint.configs.<name>`. Configs that include type-aware rules require `parserOptions.projectService` or `parserOptions.project` to be configured.
+
+### Configs without type information
+
+| Config | Description |
+| ------ | ----------- |
+| `base` | Minimal config that sets only the required parser and plugin options. Not recommended for direct use — extend a higher-level config instead. |
+| `eslintRecommended` | Disables ESLint core rules already handled by TypeScript, and enables rules that benefit from TypeScript's transpilation. |
+| `recommended` | Rules for code correctness. Drop-in, requires no additional configuration. |
+| `strict` | Everything in `recommended`, plus additional rules that catch bugs. |
+| `stylistic` | Rules for code style and consistency that do not affect program logic. |
+| `all` | Every rule provided by typescript-eslint. Many rules conflict or require configuration — not recommended for most projects. |
+| `disableTypeChecked` | Disables all type-aware linting. Use this on files that should not be type-checked (e.g., `.js` files). |
+
+### Configs with type information
+
+These configs require `parserOptions.projectService: true` (or `project`) to be set.
+
+| Config | Description |
+| ------ | ----------- |
+| `recommendedTypeChecked` | Everything in `recommended`, plus additional rules that require type information. |
+| `recommendedTypeCheckedOnly` | Only the type-checked rules from `recommendedTypeChecked`, with corresponding ESLint core rules disabled. |
+| `strictTypeChecked` | Everything in `recommended`, `recommendedTypeChecked`, and `strict`, plus additional strict type-aware rules. |
+| `strictTypeCheckedOnly` | Only the type-checked rules from `strictTypeChecked`, with corresponding ESLint core rules disabled. |
+| `stylisticTypeChecked` | Everything in `stylistic`, plus additional stylistic rules that require type information. |
+| `stylisticTypeCheckedOnly` | Only the type-checked rules from `stylisticTypeChecked`, with corresponding ESLint core rules disabled. |
+
+<Tip>
+  Start with `recommended` if you want correctness rules with no type-checking overhead, or `recommendedTypeChecked` for the most complete correctness checking.
+</Tip>
+
+## The `config()` helper (deprecated)
+
+<Warning>
+  `tseslint.config(...)` was deprecated in favor of ESLint core's `defineConfig(...)`, first released in ESLint v9.22.0. The documentation below is preserved for migration purposes.
+</Warning>
+
+`tseslint.config(...)` accepts any number of ESLint config objects and returns the equivalent flat config array. Each config object may include an `extends` array for applying base configs to specific file patterns:
+
+```js title="eslint.config.mjs"
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config({
+  files: ['**/*.ts'],
+  extends: [
+    tseslint.configs.recommended,
+  ],
+  rules: {
+    '@typescript-eslint/array-type': 'error',
+  },
+});
+```
+
+The `extends` property is particularly useful for disabling type-aware linting on specific file patterns:
+
+```js title="eslint.config.mjs"
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config({
+  files: ['**/*.js'],
+  extends: [tseslint.configs.disableTypeChecked],
+  rules: {
+    '@typescript-eslint/explicit-function-return-type': 'off',
+  },
+});
+```
+
+### Differences from `defineConfig(...)`
+
+There are two known edge cases where `tseslint.config(...)` and `defineConfig(...)` behave differently:
+
+1. **`files` in `extends`**: `tseslint.config(...)` overrides the `files` from a base config; `defineConfig(...)` intersects them. This means the same config object can produce different file coverage depending on which helper you use.
+
+2. **Type declarations**: Switching to `defineConfig(...)` may surface TypeScript errors in type-checked config files due to slight type declaration differences. These do not indicate runtime problems.

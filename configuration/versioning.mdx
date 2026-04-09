@@ -1,0 +1,171 @@
+---
+title: 'Versioning, releases, and dependencies'
+description: 'How typescript-eslint is versioned, what TypeScript and ESLint versions are supported, and what to expect from each release channel.'
+---
+
+typescript-eslint follows [semantic versioning (semver)](https://semver.org). All packages in the project are published with the **same version number** to make coordinating releases and installations straightforward.
+
+---
+
+## Supported dependency versions
+
+### TypeScript
+
+typescript-eslint mirrors [DefinitelyTyped's support window](https://github.com/DefinitelyTyped/DefinitelyTyped/#support-window): only TypeScript versions less than **2 years old** are officially supported.
+
+<Note>
+  Our packages declare an open `peerDependency` to allow experimentation with newer and beta TypeScript versions. If you use an unsupported version, the parser logs a warning to the console. You can silence it with [`warnOnUnsupportedTypeScriptVersion: false`](/configuration/parser-options#warnonunsupportedtypescriptversion) in your parser options.
+</Note>
+
+We always endeavor to support the **latest stable TypeScript release** as quickly as possible after it ships. In some cases we can also support pre-releases (betas and release candidates) as long as doing so does not compromise support for the current stable version.
+
+**New TypeScript release support timeline:**
+
+- `beta` releases: not supported
+- `rc` releases: generally not officially supported, but we begin compatibility work at this stage
+- Stable releases: supported as soon as possible after release
+
+You can track our progress on new TypeScript versions by searching for [issues labeled "New TypeScript Version"](https://github.com/typescript-eslint/typescript-eslint/issues?q=is%3Aissue+label%3A%22New+TypeScript+Version%22+sort%3Acreated-desc). An open issue means official support is not yet available.
+
+### ESLint
+
+We generally support at least the **latest two major versions** of ESLint. We may restrict this range if APIs change significantly between major releases.
+
+### Node.js
+
+We support Active LTS and Maintenance LTS Node.js releases according to the [Node.js release schedule](https://github.com/nodejs/release#release-schedule). Support for Current status releases is evaluated periodically.
+
+---
+
+## Release channels
+
+### Latest (stable)
+
+<a href="https://www.npmjs.com/package/@typescript-eslint/parser">
+  ![NPM Version](https://img.shields.io/npm/v/@typescript-eslint/parser/latest.svg?style=flat-square)
+</a>
+
+A new `latest` release is published automatically every **Monday at 17:00 UTC**, using the HEAD of the `main` branch at that time.
+
+- Latest releases are always `minor` or `patch` level — never a breaking major bump.
+- If no commits have affected public-facing packages since the last release, a `patch` version is still issued.
+- Release notes are published on the [GitHub releases page](https://github.com/typescript-eslint/typescript-eslint/releases).
+
+### Canary
+
+<a href="https://www.npmjs.com/package/@typescript-eslint/parser">
+  ![NPM Version](https://img.shields.io/npm/v/@typescript-eslint/parser/canary.svg?style=flat-square)
+</a>
+
+A canary version is published automatically for **every commit to `main`** that passes all required checks. You never need to wait for a Monday release to use a merged fix or feature.
+
+Canary versions are tagged `canary` on npm and follow an incremental patch scheme on top of the current `latest` version. For example, if `latest` is `8.1.0`, canary versions will be `8.1.1-alpha.0`, `8.1.1-alpha.1`, and so on.
+
+**Install a canary version:**
+
+```bash
+npm install typescript-eslint@canary --save-dev --force
+```
+
+<Note>
+  During the final phases of preparing the next major version, canary releases are published manually rather than automatically. Major version branches use the `rc-v{major}` tag on npm until the release is promoted to `latest`.
+</Note>
+
+### Major releases
+
+Major releases do not follow a fixed schedule. They are performed as needed, tracked by a backlog milestone on GitHub named `{major}.0.0`.
+
+When a major release is in progress, release candidates are published to the `rc-v{major}` tag on npm for each commit to the major branch.
+
+<Warning>
+  Older major versions of typescript-eslint are **never maintained or supported**. They may crash with current TypeScript versions. Always use the latest version.
+</Warning>
+
+### Out-of-band releases
+
+Emergency patch releases outside the Monday schedule may happen for critical regressions introduced in the most recent `latest` release. These are assessed case-by-case and performed manually by a maintainer.
+
+### Back-porting
+
+typescript-eslint does **not** back-port fixes to previously released major or minor versions. All changes are released forward only.
+
+---
+
+## What counts as a breaking change
+
+Because typescript-eslint consists of several packages with very different consumers, what constitutes a breaking change depends on the package.
+
+<AccordionGroup>
+
+  <Accordion title="ast-spec and visitor-keys">
+    **Breaking** changes include:
+    - Removing or renaming an existing AST node type.
+    - Removing or renaming an existing property on an AST node.
+    - Changing a property's type in a non-refining way (for example `string` → `number`).
+
+    **Non-breaking** changes include:
+    - Adding a new property to the AST.
+    - Adding a new node type.
+    - Adding a new node type to an existing union type.
+    - Refining a type to be more specific (for example `string` → `'literal' | 'union'`).
+    - Removing a type from a union that was erroneously added and did not match the runtime AST.
+  </Accordion>
+
+  <Accordion title="eslint-plugin">
+    **Breaking** changes include anything that requires you to update your config:
+    - Removing or renaming a rule option.
+    - Changing the default option of a rule.
+    - Making a rule's schema stricter.
+    - Adding type information requirements to a rule that previously had none.
+    - Removing or renaming a rule.
+    - Changing any of the recommended configurations.
+    - Changing a rule's default behavior in a way that causes new reports in a large proportion of average codebases.
+
+    **Non-breaking** changes include:
+    - Adding a rule option that by default preserves existing behavior.
+    - Adding a new rule.
+    - Deprecating a rule.
+    - Adding checks that cause new reports in a small-to-medium proportion of cases.
+    - Refactoring a rule without introducing additional reports.
+    - Updating rule documentation or metadata.
+    - Adding or removing a fixer or suggestion fixer.
+    - Fixing incorrect behavior (even if this causes new reports).
+  </Accordion>
+
+  <Accordion title="parser, typescript-estree, scope-manager, types, type-utils, utils">
+    **Breaking** changes include:
+    - Changing the public API surface in a backwards-incompatible way (removing or renaming exported functions, types, etc.).
+
+    **Non-breaking** changes include:
+    - Adding to the public API surface (new exports, new functions, new types).
+    - Deprecating parts of the API.
+    - Adding optional arguments to functions or optional properties to input types.
+    - Adding additional properties to output types.
+    - Adding JSDoc documentation.
+  </Accordion>
+
+  <Accordion title="Internal packages">
+    Packages that are not part of the public API (such as `eslint-plugin-internal` or the website) are excluded from semver calculations entirely.
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Semver stability of shared configs
+
+Not all shared configurations carry the same semver guarantees. See [Shared configs](/configuration/shared-configs) for the full list.
+
+| Configuration | Semver-stable |
+|---|---|
+| `recommended` | Yes |
+| `recommended-type-checked` | Yes |
+| `strict` | **No** |
+| `strict-type-checked` | **No** |
+| `stylistic` | Yes |
+| `stylistic-type-checked` | Yes |
+| `all` | **No** |
+| `disable-type-checked` | **No** |
+| `strict-type-checked-only` | **No** |
+
+Unstable configurations may have their enabled rules and/or rule options changed outside of major version bumps.

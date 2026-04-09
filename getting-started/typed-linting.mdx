@@ -1,0 +1,170 @@
+---
+title: 'Typed linting'
+description: "Enable type-aware lint rules that use TypeScript's type checker for deeper static analysis of your code."
+---
+
+Some typescript-eslint rules use TypeScript's type checking APIs to provide much deeper insight into your code than syntax-only analysis allows. This requires TypeScript to analyze your entire project — not just the file being linted — so these rules are slower than traditional lint rules, but significantly more powerful.
+
+Examples of issues only detectable with type information:
+
+- `await`-ing a value that isn't a `Promise`
+- Calling `.toString()` on an object that returns `[object Object]`
+- Unsafe member access on a value typed as `any`
+- Missing return values in functions typed to return a specific type
+
+## Enabling typed linting
+
+There are two small changes to make to your config:
+
+1. Switch to a `TypeChecked` variant of any shared config you're using.
+2. Add `languageOptions.parserOptions.projectService: true` to tell the parser how to find your `tsconfig.json`.
+
+<Tabs>
+  <Tab title="Flat config">
+    ```js eslint.config.mjs
+    import js from '@eslint/js';
+    import { defineConfig } from 'eslint/config';
+    import tseslint from 'typescript-eslint';
+
+    export default defineConfig(
+      js.configs.recommended,
+      // Remove this line
+      tseslint.configs.recommended,
+      // Added lines start
+      tseslint.configs.recommendedTypeChecked,
+      {
+        languageOptions: {
+          parserOptions: {
+            projectService: true,
+          },
+        },
+      },
+      // Added lines end
+    );
+    ```
+
+    **What each part does:**
+
+    - `tseslint.configs.recommendedTypeChecked` — The [recommended shared config](/configuration/shared-configs#recommended-type-checked) plus additional rules that require type information.
+    - `parserOptions.projectService: true` — Asks TypeScript's type-checking service for each source file's type information. See [Parser > `projectService`](/packages/parser#projectservice) for all available settings.
+  </Tab>
+  <Tab title="Legacy config">
+    ```js .eslintrc.cjs
+    /* eslint-env node */
+    module.exports = {
+      extends: [
+        'eslint:recommended',
+        // Remove this line
+        'plugin:@typescript-eslint/recommended',
+        // Add this line
+        'plugin:@typescript-eslint/recommended-type-checked',
+      ],
+      plugins: ['@typescript-eslint'],
+      parser: '@typescript-eslint/parser',
+      // Added lines start
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: __dirname,
+      },
+      // Added lines end
+      root: true,
+    };
+    ```
+
+    **What each part does:**
+
+    - `plugin:@typescript-eslint/recommended-type-checked` — The [recommended shared config](/configuration/shared-configs#recommended-type-checked) plus additional rules that require type information.
+    - `parserOptions.projectService: true` — Asks TypeScript's type-checking service for each source file's type information. See [Parser > `projectService`](/packages/parser#projectservice).
+    - `parserOptions.tsconfigRootDir` — The absolute path to your project root. Used to resolve `tsconfig.json` correctly. See [Parser > `tsconfigRootDir`](/packages/parser#tsconfigrootdir).
+  </Tab>
+</Tabs>
+
+<Warning>
+  After enabling typed linting, your ESLint config may show a parsing error about type information. This usually means a file is not included in your `tsconfig.json`. See [our typed linting troubleshooting guide](/troubleshooting/typed-linting-issues) for how to resolve it.
+</Warning>
+
+Once configured, run the same lint command as before. You may see new errors reported by type-aware rules.
+
+## Shared configuration variants
+
+If you already enabled `strict` or `stylistic` configs, replace them with their `TypeChecked` equivalents to include their type-aware rules as well.
+
+<Tabs>
+  <Tab title="Flat config">
+    ```js eslint.config.mjs
+    export default defineConfig(
+      js.configs.recommended,
+      // Removed lines start
+      tseslint.configs.strict,
+      tseslint.configs.stylistic,
+      // Removed lines end
+      // Added lines start
+      tseslint.configs.strictTypeChecked,
+      tseslint.configs.stylisticTypeChecked,
+      // Added lines end
+      // ...
+    );
+    ```
+  </Tab>
+  <Tab title="Legacy config">
+    ```js .eslintrc.cjs
+    /* eslint-env node */
+    module.exports = {
+      extends: [
+        'eslint:recommended',
+        // Removed lines start
+        'plugin:@typescript-eslint/strict',
+        'plugin:@typescript-eslint/stylistic',
+        // Removed lines end
+        // Added lines start
+        'plugin:@typescript-eslint/strict-type-checked',
+        'plugin:@typescript-eslint/stylistic-type-checked',
+        // Added lines end
+      ],
+      // ...
+    };
+    ```
+  </Tab>
+</Tabs>
+
+## Available type-checked configs
+
+| Config | Description |
+|--------|-------------|
+| `recommendedTypeChecked` | All of `recommended`, plus rules that require type information. |
+| `recommendedTypeCheckedOnly` | Only the type-checked rules from `recommended` (disables corresponding core ESLint rules). |
+| `strictTypeChecked` | All of `recommended`, `recommendedTypeChecked`, and `strict`, plus additional strict type-aware rules. |
+| `strictTypeCheckedOnly` | Only the type-checked rules from `strict` (disables corresponding core ESLint rules). |
+| `stylisticTypeChecked` | All of `stylistic`, plus stylistic rules that require type information. |
+| `stylisticTypeCheckedOnly` | Only the type-checked rules from `stylistic` (disables corresponding core ESLint rules). |
+
+Read more about each config in the [shared configurations docs](/configuration/shared-configs).
+
+## Performance
+
+Typed linting requires TypeScript to perform a full build of your project before ESLint can run. The impact depends on project size:
+
+- **Small projects** — A few seconds or less; generally negligible.
+- **Large projects** — Can add meaningful time to your lint run.
+
+<Tip>
+  Most developers consume lint errors through their IDE (VS Code, WebStorm, etc.), which caches type information and avoids repeated full builds. The performance cost is mainly felt in full lint runs on CI or pre-push hooks — where the tradeoff is usually worthwhile given the quality of errors caught.
+</Tip>
+
+**We strongly recommend enabling type-aware linting.** The additional rules catch entire categories of bugs that syntax-only linting cannot detect.
+
+See [Troubleshooting > Typed Linting Issues](/troubleshooting/typed-linting-issues) for strategies to improve typed linting performance in large projects.
+
+## Parser options reference
+
+Two parser options control how type information is resolved:
+
+- [`projectService`](/packages/parser#projectservice) — The recommended option. Asks TypeScript's language service for type information, with settings to customize how `tsconfig.json` files are discovered.
+- [`project`](/packages/parser#project) — An older alternative that explicitly points to one or more `tsconfig.json` paths. Useful when `projectService` doesn't fit your project structure.
+
+## Troubleshooting
+
+If you're having problems with typed linting, see:
+
+- [Troubleshooting & FAQs](/troubleshooting/faqs)
+- [Troubleshooting > Typed Linting Issues](/troubleshooting/typed-linting-issues)

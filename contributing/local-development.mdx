@@ -1,0 +1,332 @@
+---
+title: 'Local development'
+description: 'How to set up the typescript-eslint monorepo locally, build packages, run tests, and validate your changes.'
+keywords: ['local development', 'contributing', 'monorepo', 'pnpm', 'build', 'tests', 'typescript-eslint']
+---
+
+This guide walks you through cloning and running the typescript-eslint repository locally. For contribution workflows — issues and pull requests — see the [contributing overview](/contributing/overview).
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- **Node.js** — check the `engines` field in the root `package.json` for the required version
+- **pnpm** — check the `packageManager` field in the root `package.json` for the exact version
+
+<Tip>
+Use a Node.js version manager such as [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm) to switch Node versions easily.
+</Tip>
+
+## Initial setup
+
+<Steps>
+  <Step title="Fork and clone the repository">
+    [Fork the repository](https://help.github.com/articles/fork-a-repo) on GitHub, then clone your fork:
+
+    ```bash
+    git clone https://github.com/<your-username>/typescript-eslint
+    cd typescript-eslint
+    ```
+  </Step>
+  <Step title="Install pnpm">
+    Install the pnpm version specified in `package.json`:
+
+    ```bash
+    corepack enable
+    corepack prepare
+    ```
+
+    Or install pnpm directly:
+
+    ```bash
+    npm install -g pnpm
+    ```
+  </Step>
+  <Step title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+
+    The postinstall scripts run `pnpm run build` automatically, so all packages are compiled after this step completes.
+  </Step>
+</Steps>
+
+After `pnpm install` finishes, the repository is fully built and ready for development.
+
+## Building packages
+
+The repository is a monorepo managed with pnpm workspaces and Nx. Packages are compiled to `dist/` inside each package directory.
+
+### Build all packages
+
+```bash
+pnpm run build
+```
+
+### Build a single package
+
+Navigate to the package directory and run `build`:
+
+```bash
+pnpm run build
+```
+
+Or run it from the root with a filter:
+
+```bash
+pnpm --filter @typescript-eslint/eslint-plugin run build
+```
+
+<Warning>
+Packages depend on each other's compiled output. If you change a package, you must rebuild it before its consumers will pick up the changes. For example, after modifying `packages/scope-manager`, rebuild it before testing `packages/eslint-plugin`.
+</Warning>
+
+### Build dependency order
+
+The packages form a dependency graph. The key relationships are:
+
+- `typescript-estree` — parses TypeScript source and produces the AST
+- `types` — shared TypeScript types (TSESTree, AST_NODE_TYPES)
+- `scope-manager` — scope analysis built on top of `typescript-estree`
+- `utils` — shared utilities for rule authors, depends on `types` and `typescript-estree`
+- `eslint-plugin` — the main rules package, depends on `utils` and `scope-manager`
+- `rule-tester` — testing utilities for rule authors
+
+When in doubt, rebuild from the root: `pnpm run build`.
+
+## Validating changes
+
+The following checks run automatically on every pull request. Run them locally before opening or un-drafting a PR.
+
+### Formatting
+
+The codebase uses [Prettier](https://prettier.io) for formatting. A Git pre-commit hook applies it automatically to staged files.
+
+To format manually:
+
+```bash
+pnpm run format
+```
+
+### Linting
+
+```bash
+pnpm run lint
+```
+
+You can run this from the root or inside any individual package.
+
+### Spell checking and markdown linting
+
+```bash
+# Check spelling across all code using CSpell
+pnpm run check-spelling
+
+# Lint markdown documentation files
+pnpm run lint-markdown
+```
+
+### Type checking
+
+```bash
+pnpm run typecheck
+```
+
+Run this from the root or inside any package. Use the watch flag during active development:
+
+```bash
+pnpm run typecheck -w
+```
+
+### Tests
+
+```bash
+pnpm run test
+```
+
+Run from the root to test all packages, or inside a specific package to test only that package.
+
+#### Running a single test
+
+To focus on one test case while debugging, add `only: true` to the test object:
+
+```typescript
+ruleTester.run('my-rule', rule, {
+  valid: [],
+  invalid: [
+    {
+      only: true, // run only this case
+      code: '...',
+      errors: [{ messageId: 'myError' }],
+    },
+  ],
+});
+```
+
+<Note>
+Adding `only: true` triggers an `eslint-plugin/no-only-tests` lint error — that is intentional so you remember to remove it before opening a PR. The rule is only there as a reminder.
+</Note>
+
+Visual Studio Code users can also use the built-in [launch tasks](https://code.visualstudio.com/docs/editor/debugging) for visual debugging of tests.
+
+### Code coverage
+
+Coverage reports are generated automatically when you run `pnpm run test`. The project targets 100% coverage for all packages except `website`.
+
+## Rule development
+
+Several parts of the repository are auto-generated from rule files. After modifying a rule, you may need to regenerate:
+
+<Tabs>
+  <Tab title="Shared configs">
+    If you add, remove, or change a rule's `recommended` status, regenerate the shared configs from the root:
+
+    ```bash
+    pnpm run generate-configs
+    ```
+  </Tab>
+  <Tab title="Rule docs snapshots">
+    If you change a rule's schema or documentation, regenerate snapshots from the `eslint-plugin` package:
+
+    ```bash
+    pnpm run test docs -u
+    ```
+  </Tab>
+</Tabs>
+
+## Working with the monorepo
+
+### Useful pnpm commands
+
+| Command | Description |
+|---|---|
+| `pnpm install` | Install all dependencies |
+| `pnpm run build` | Build all packages |
+| `pnpm run test` | Run all tests |
+| `pnpm run lint` | Lint all packages |
+| `pnpm run format` | Format all files with Prettier |
+| `pnpm run typecheck` | Type-check all packages |
+| `pnpm --filter <pkg> run <cmd>` | Run a command in a specific package |
+
+### Running commands in a specific package
+
+Use pnpm's `--filter` flag to scope a command to one package:
+
+```bash
+# Run tests only for the parser package
+pnpm --filter @typescript-eslint/parser run test
+
+# Build only typescript-estree
+pnpm --filter @typescript-eslint/typescript-estree run build
+```
+
+Or navigate into the package directory and run commands directly:
+
+```bash
+cd packages/eslint-plugin
+pnpm run test
+```
+
+### Nx task graph
+
+The repository uses [Nx](https://nx.dev) to manage the task dependency graph. Nx caches task outputs and only reruns tasks when affected files change. If you want to force a fresh run, use the `--skip-nx-cache` flag:
+
+```bash
+pnpm run build --skip-nx-cache
+```
+
+## Website development
+
+The documentation website is built with [Docusaurus](https://docusaurus.io). To run a local preview:
+
+<Steps>
+  <Step title="Build all packages first">
+    The `website` package depends on the compiled output of other packages.
+
+    ```bash
+    pnpm run build
+    ```
+  </Step>
+  <Step title="Start the dev server">
+    ```bash
+    pnpm run start
+    ```
+
+    Or from the website package directory:
+
+    ```bash
+    pnpm run start
+    ```
+
+    The site is available at `http://localhost:3000`.
+  </Step>
+</Steps>
+
+## Testing local changes in another project
+
+To use a locally modified version of a typescript-eslint package in another project, use pnpm's `link` command or point the dependency directly at the local path.
+
+### Using pnpm link
+
+In the typescript-eslint package you modified:
+
+```bash
+pnpm link --global
+```
+
+In your other project:
+
+```bash
+pnpm link --global @typescript-eslint/eslint-plugin
+```
+
+### Using a local path in `package.json`
+
+```json
+{
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "file:../typescript-eslint/packages/eslint-plugin"
+  }
+}
+```
+
+Run `pnpm install` in your project after making this change.
+
+## Common issues
+
+<AccordionGroup>
+  <Accordion title="Changes not reflected after editing a package">
+    Rebuild the package you changed — and any package that depends on it — before running tests or your consuming project:
+
+    ```bash
+    pnpm run build
+    ```
+  </Accordion>
+  <Accordion title="Type errors after pulling upstream changes">
+    A full clean build usually resolves this. Delete `node_modules` and `dist` directories, then reinstall:
+
+    ```bash
+    pnpm install
+    ```
+
+    The postinstall script will rebuild everything.
+  </Accordion>
+  <Accordion title="pnpm version mismatch">
+    The repository pins a specific pnpm version in `package.json`'s `packageManager` field. If your pnpm version differs, use `corepack` to activate the correct version:
+
+    ```bash
+    corepack enable && corepack prepare
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Contributing overview" icon="handshake" href="/contributing/overview">
+    Learn how to file issues and send pull requests.
+  </Card>
+  <Card title="Building custom rules" icon="wrench" href="/developers/custom-rules">
+    Start writing your own ESLint rules using typescript-eslint.
+  </Card>
+</CardGroup>

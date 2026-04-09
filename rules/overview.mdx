@@ -1,0 +1,303 @@
+---
+title: "Rules overview"
+description: "A complete reference for all 100+ rules in @typescript-eslint/eslint-plugin, organized by category and config membership."
+keywords: ["eslint", "typescript", "rules", "plugin", "linting"]
+---
+
+The `@typescript-eslint/eslint-plugin` package ships with over 100 rules that fall into three broad categories. Some rules work on syntax alone and run without any TypeScript project configuration. Others use TypeScript's type checker at lint time and require type-aware linting to be enabled.
+
+<CardGroup cols={3}>
+  <Card title="Correctness rules" icon="shield-check" href="/rules/type-checking-rules">
+    Catch real bugs and unsafe patterns. Many of these rules require type information and live in the `recommended` and `recommended-type-checked` configs.
+  </Card>
+  <Card title="Strictness rules" icon="lock" href="/rules/type-checking-rules">
+    Extra rules for teams that want tighter guarantees. Enabled via the `strict` and `strict-type-checked` configs.
+  </Card>
+  <Card title="Stylistic rules" icon="paintbrush" href="/rules/stylistic-rules">
+    Consistency and readability rules that don't affect program logic. Enabled via the `stylistic` and `stylistic-type-checked` configs.
+  </Card>
+</CardGroup>
+
+## Shared configs
+
+The easiest way to use the rules is through one of the official shared configurations. Each config composes on top of the previous one:
+
+| Config | Description |
+|---|---|
+| `recommended` | Recommended correctness rules, no type information required |
+| `recommended-type-checked` | All of `recommended` plus rules that require type information |
+| `strict` | All of `recommended` plus additional strictness rules |
+| `strict-type-checked` | All of the above, including strict type-checked rules |
+| `stylistic` | Stylistic rules, no type information required |
+| `stylistic-type-checked` | All of `stylistic` plus stylistic rules that require type information |
+
+```js eslint.config.mjs
+import { defineConfig } from 'eslint/config';
+import tseslint from 'typescript-eslint';
+
+export default defineConfig(
+  // Start with strict type-checked + stylistic type-checked
+  ...tseslint.configs.strictTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
+  {
+    // Required for type-checked rules
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+);
+```
+
+## Enabling and disabling individual rules
+
+You can override any rule in the shared configs by adding a `rules` object to your config. Rule names are prefixed with `@typescript-eslint/`.
+
+```js eslint.config.mjs
+import { defineConfig } from 'eslint/config';
+import tseslint from 'typescript-eslint';
+
+export default defineConfig(
+  ...tseslint.configs.recommended,
+  {
+    rules: {
+      // Turn off a rule from the shared config
+      '@typescript-eslint/no-explicit-any': 'off',
+
+      // Downgrade from error to warning
+      '@typescript-eslint/no-unused-vars': 'warn',
+
+      // Enable a rule not in the shared config
+      '@typescript-eslint/explicit-function-return-type': 'error',
+
+      // Enable a rule with custom options
+      '@typescript-eslint/naming-convention': [
+        'error',
+        { selector: 'variable', format: ['camelCase', 'UPPER_CASE'] },
+        { selector: 'typeLike', format: ['PascalCase'] },
+      ],
+    },
+  },
+);
+```
+
+## Complete rule list
+
+The tables below list every rule available in the plugin. The **Config** column shows the lowest-level shared config that enables the rule (`rec` = `recommended`, `rec-tc` = `recommended-type-checked`, `strict` = `strict`, `strict-tc` = `strict-type-checked`, `style` = `stylistic`, `style-tc` = `stylistic-type-checked`). Rules marked with **TC** require type information.
+
+### Correctness rules (recommended)
+
+These rules are enabled in `recommended` and do not require type information.
+
+| Rule | Description |
+|---|---|
+| `ban-ts-comment` | Disallows `@ts-ignore`, `@ts-nocheck`, and similar directives without descriptions |
+| `no-array-constructor` | Disallows `Array` constructor calls that can be replaced with array literals |
+| `no-duplicate-enum-values` | Disallows duplicate enum member values |
+| `no-empty-object-type` | Disallows the `{}` type in positions where it acts as an empty interface |
+| `no-explicit-any` | Disallows the `any` type |
+| `no-extra-non-null-assertion` | Disallows extra non-null assertion operators `!!` |
+| `no-misused-new` | Disallows calling `new` on a function type named `constructor` |
+| `no-namespace` | Disallows TypeScript namespaces except in declaration files |
+| `no-non-null-asserted-optional-chain` | Disallows non-null assertions after optional chain expressions |
+| `no-require-imports` | Disallows `require()` calls; use ES module syntax instead |
+| `no-this-alias` | Disallows assigning `this` to a variable |
+| `no-unnecessary-type-constraint` | Disallows unnecessary constraints on generic types |
+| `no-unsafe-declaration-merging` | Disallows unsafe declaration merging |
+| `no-unsafe-function-type` | Disallows the `Function` type; prefer more specific function signatures |
+| `no-unused-expressions` | Disallows unused expressions |
+| `no-unused-vars` | Disallows unused variables (TypeScript-aware extension of the base rule) |
+| `no-wrapper-object-types` | Disallows wrapper object types like `String`, `Number`, `Boolean` |
+| `prefer-as-const` | Enforces use of `as const` over literal type annotations |
+| `prefer-namespace-keyword` | Enforces use of `namespace` keyword over `module` for declaration merging |
+| `triple-slash-reference` | Disallows `/// <reference ...>` comments where `import` is available |
+
+### Correctness rules (recommended-type-checked)
+
+These rules are added when you use `recommended-type-checked`. They all require type information.
+
+| Rule | Description |
+|---|---|
+| `await-thenable` | Disallows `await`ing values that are not Promises or thenables |
+| `no-array-delete` | Disallows `delete` on array elements |
+| `no-base-to-string` | Disallows `.toString()` calls on objects that produce `[object Object]` |
+| `no-duplicate-type-constituents` | Disallows duplicate type union or intersection constituents |
+| `no-floating-promises` | Requires Promise-like values to be handled (awaited, caught, or voided) |
+| `no-for-in-array` | Disallows `for...in` loops over arrays |
+| `no-implied-eval` | Disallows `eval()`-like methods passed string arguments |
+| `no-misused-promises` | Disallows async functions in positions where a sync function is expected |
+| `no-redundant-type-constituents` | Disallows union/intersection type members made redundant by other members |
+| `no-unnecessary-type-assertion` | Disallows type assertions that do not change the type of the expression |
+| `no-unsafe-argument` | Disallows passing `any`-typed values as function arguments |
+| `no-unsafe-assignment` | Disallows assigning `any`-typed values to variables or properties |
+| `no-unsafe-call` | Disallows calling `any`-typed values as functions |
+| `no-unsafe-enum-comparison` | Disallows comparing enum values with non-enum values |
+| `no-unsafe-member-access` | Disallows property access on `any`-typed values |
+| `no-unsafe-return` | Disallows returning `any`-typed values from functions |
+| `no-unsafe-unary-minus` | Disallows unary minus on non-numeric types |
+| `only-throw-error` | Disallows throwing values that are not `Error` objects |
+| `prefer-promise-reject-errors` | Requires `Promise.reject()` to only be called with `Error` objects |
+| `require-await` | Disallows `async` functions with no `await` expression |
+| `restrict-plus-operands` | Enforces that both operands of `+` are of the same type |
+| `restrict-template-expressions` | Enforces that template literal expressions are of `string` type |
+| `unbound-method` | Enforces that methods are called on their owning objects |
+
+### Strict rules (strict)
+
+These rules are added in `strict` and do not require type information.
+
+| Rule | Description |
+|---|---|
+| `no-dynamic-delete` | Disallows `delete` with computed property keys |
+| `no-extraneous-class` | Disallows classes that contain only static members |
+| `no-invalid-void-type` | Disallows `void` type outside of generic or return types |
+| `no-non-null-asserted-nullish-coalescing` | Disallows non-null assertions before nullish coalescing operators |
+| `no-non-null-assertion` | Disallows non-null assertions using `!` postfix |
+| `no-useless-constructor` | Disallows constructors that do nothing beyond calling `super()` |
+| `prefer-literal-enum-member` | Requires enum members to use literal values only |
+| `unified-signatures` | Enforces combining overloads that are equivalent to a single signature with union types |
+
+### Strict rules (strict-type-checked)
+
+These additional rules are included in `strict-type-checked` and require type information.
+
+| Rule | Description |
+|---|---|
+| `no-confusing-void-expression` | Disallows `void` in a confusing position |
+| `no-deprecated` | Disallows use of `@deprecated`-tagged symbols |
+| `no-meaningless-void-operator` | Disallows `void` operator on values that are already `void` |
+| `no-misused-spread` | Disallows spreading values in positions where spreading is semantically incorrect |
+| `no-mixed-enums` | Disallows enums that mix string and number members |
+| `no-unnecessary-boolean-literal-compare` | Disallows comparing booleans to boolean literals |
+| `no-unnecessary-condition` | Disallows conditions that are always truthy or always falsy |
+| `no-unnecessary-template-expression` | Disallows template literals containing only one expression |
+| `no-unnecessary-type-arguments` | Disallows type arguments that are equal to the default |
+| `no-unnecessary-type-conversion` | Disallows type conversions that do not change the type of the value |
+| `no-unnecessary-type-parameters` | Disallows type parameters that can be replaced with concrete types |
+| `no-unsafe-type-assertion` | Disallows type assertions that are known to be unsafe |
+| `no-useless-default-assignment` | Disallows default parameter values that equal `undefined` |
+| `prefer-reduce-type-parameter` | Enforces using type parameter instead of casting the accumulator in `Array.reduce` |
+| `prefer-return-this-type` | Enforces returning `this` type in method chains |
+| `related-getter-setter-pairs` | Enforces that `get`/`set` accessor pairs have compatible types |
+| `return-await` | Enforces consistent `return await` behavior in `try/catch` |
+| `use-unknown-in-catch-callback-variable` | Enforces typing catch callback parameters as `unknown` |
+
+### Stylistic rules
+
+These rules are in `stylistic` and `stylistic-type-checked`. See [Stylistic rules](/rules/stylistic-rules) for full documentation.
+
+| Rule | Description | Type-checked |
+|---|---|---|
+| `adjacent-overload-signatures` | Requires overloaded function signatures to be adjacent | No |
+| `array-type` | Enforces consistent use of `T[]` vs `Array<T>` | No |
+| `ban-tslint-comment` | Disallows `// tslint:` comments (use ESLint instead) | No |
+| `class-literal-property-style` | Enforces using `readonly` for literal class properties | No |
+| `consistent-generic-constructors` | Enforces consistent placement of type parameter in generic constructors | No |
+| `consistent-indexed-object-style` | Enforces consistent style for indexed signatures | No |
+| `consistent-type-assertions` | Enforces consistent style for type assertions | No |
+| `consistent-type-definitions` | Enforces using `interface` or `type` consistently | No |
+| `dot-notation` | Enforces dot notation access for properties | Yes |
+| `no-confusing-non-null-assertion` | Disallows non-null assertions in places where they could be confusing | No |
+| `no-empty-function` | Disallows empty function bodies | No |
+| `no-inferrable-types` | Disallows type annotations that can be inferred | No |
+| `non-nullable-type-assertion-style` | Enforces using `!` assertion style over `as Type` when possible | Yes |
+| `prefer-find` | Enforces `Array.find()` over `Array.filter()[0]` | Yes |
+| `prefer-for-of` | Enforces `for...of` loops instead of `for` loops with only an index variable | No |
+| `prefer-function-type` | Enforces using function type signatures instead of callable interfaces | No |
+| `prefer-includes` | Enforces `str.includes()` over `str.indexOf() !== -1` | Yes |
+| `prefer-nullish-coalescing` | Enforces using `??` instead of `\|\|` for nullable values | Yes |
+| `prefer-optional-chain` | Enforces using optional chaining instead of logical AND chains | Yes |
+| `prefer-regexp-exec` | Enforces `str.exec()` over `regexp.exec(str)` | Yes |
+| `prefer-string-starts-ends-with` | Enforces `str.startsWith()` / `str.endsWith()` over equivalent patterns | Yes |
+
+### Additional rules (not in shared configs)
+
+These rules are available but not enabled in any shared config. Enable them individually based on your project's needs.
+
+<AccordionGroup>
+  <Accordion title="Naming and structure">
+
+| Rule | Description |
+|---|---|
+| `consistent-return` | Requires functions to always or never specify return values |
+| `consistent-type-exports` | Enforces consistent use of type-only exports |
+| `consistent-type-imports` | Enforces using `import type` for type-only imports |
+| `default-param-last` | Enforces default parameters to be last |
+| `explicit-function-return-type` | Requires explicit return type annotations on functions |
+| `explicit-member-accessibility` | Requires explicit accessibility modifiers on class members |
+| `explicit-module-boundary-types` | Requires explicit return and argument types on exported functions |
+| `init-declarations` | Requires variable declarations to be initialized |
+| `max-params` | Enforces a maximum number of function parameters |
+| `member-ordering` | Enforces a consistent member ordering in classes and interfaces |
+| `method-signature-style` | Enforces using property style over method style for function signatures in interfaces |
+| `naming-convention` | Enforces naming conventions for identifiers across the codebase |
+| `parameter-properties` | Enforces consistent use of TypeScript parameter properties |
+
+  </Accordion>
+  <Accordion title="Type safety extras">
+
+| Rule | Description |
+|---|---|
+| `no-type-alias` | Disallows type aliases (deprecated; prefer `no-restricted-types` patterns) |
+| `no-unnecessary-parameter-property-assignment` | Disallows redundant assignment in constructor bodies when using parameter properties |
+| `no-unnecessary-qualifier` | Disallows unnecessary namespace qualifiers |
+| `no-unsafe-type-assertion` | Disallows type assertions that are known to be unsafe |
+| `prefer-readonly` | Requires private members to be marked `readonly` if they are never reassigned |
+| `prefer-readonly-parameter-types` | Requires function parameters to be typed as `readonly` |
+| `prefer-destructuring` | Enforces using destructuring assignment when possible |
+| `promise-function-async` | Requires functions that return promises to be marked `async` |
+| `require-array-sort-compare` | Requires a comparator function in `Array.sort()` calls |
+| `strict-boolean-expressions` | Restricts which types can be used in boolean expressions |
+| `switch-exhaustiveness-check` | Requires switch statements over union types to be exhaustive |
+| `typedef` | Requires type annotations in certain places |
+
+  </Accordion>
+  <Accordion title="Enum-specific rules">
+
+| Rule | Description |
+|---|---|
+| `no-duplicate-enum-values` | Disallows duplicate enum member values |
+| `no-mixed-enums` | Disallows enums that mix string and number members |
+| `prefer-enum-initializers` | Requires explicit initializers in numeric enum members |
+| `prefer-literal-enum-member` | Requires enum members to use literal values only |
+
+  </Accordion>
+  <Accordion title="Import/export rules">
+
+| Rule | Description |
+|---|---|
+| `consistent-type-exports` | Enforces consistent use of type-only exports |
+| `consistent-type-imports` | Enforces using `import type` for type-only imports |
+| `no-import-type-side-effects` | Disallows side effects in `import type` statements |
+| `no-restricted-imports` | Disallows specified imports (TypeScript-aware) |
+| `no-useless-empty-export` | Disallows empty export statements used only to mark a file as a module |
+
+  </Accordion>
+  <Accordion title="Other rules">
+
+| Rule | Description |
+|---|---|
+| `ban-tslint-comment` | Disallows `// tslint:` comments |
+| `class-methods-use-this` | Enforces class methods to use `this` |
+| `dot-notation` | Enforces dot notation access |
+| `no-loop-func` | Disallows functions declared in loops |
+| `no-loss-of-precision` | Disallows literal numbers that lose precision |
+| `no-magic-numbers` | Disallows magic numbers |
+| `no-redeclare` | Disallows variable redeclaration |
+| `no-restricted-types` | Disallows specified type names |
+| `no-shadow` | Disallows variable declarations that shadow variables declared in outer scope |
+| `no-unused-private-class-members` | Disallows unused private class members |
+| `no-use-before-define` | Disallows using variables before they are defined |
+| `no-var-requires` | Disallows `require()` statements except in import statements (deprecated; use `no-require-imports`) |
+| `only-throw-error` | Disallows throwing values that are not `Error` objects |
+| `prefer-ts-expect-error` | Enforces `@ts-expect-error` over `@ts-ignore` (deprecated; covered by `ban-ts-comment`) |
+| `sort-type-constituents` | Enforces members of a type union/intersection to be sorted alphabetically |
+
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+For a complete, always-up-to-date list of all rules and their options, see the [typescript-eslint rules reference](https://typescript-eslint.io/rules/).
+</Note>

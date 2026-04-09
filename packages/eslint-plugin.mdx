@@ -1,0 +1,158 @@
+---
+title: "@typescript-eslint/eslint-plugin"
+description: "The ESLint plugin that provides TypeScript-specific lint rules and shared configuration presets."
+keywords: ["eslint-plugin", "typescript-eslint", "rules", "configs", "flat config", "eslintrc"]
+---
+
+## Overview
+
+`@typescript-eslint/eslint-plugin` is the ESLint plugin that provides all of typescript-eslint's lint rules and configuration presets.
+
+<Note>
+  If you are using ESLint's flat config format (`eslint.config.*`), you do not need to install this package directly. Install `typescript-eslint` instead, which re-exports both this plugin and the parser from a single package.
+</Note>
+
+You need this package directly when:
+
+- You are using a legacy `.eslintrc` config and cannot use the `typescript-eslint` unified package.
+- You are authoring a third-party ESLint plugin or config that needs to reference the plugin object directly.
+- You need access to the raw `rules` map for custom tooling.
+
+### Exports
+
+| Name      | Description |
+| --------- | ----------- |
+| `rules`   | Object mapping rule names to rule objects. All typescript-eslint rules are included here. |
+| `configs` | Object mapping config preset names to extendable ESLint config settings. Includes both legacy (`eslintrc`) and flat config variants. |
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install --save-dev @typescript-eslint/eslint-plugin @typescript-eslint/parser
+```
+
+```bash yarn
+yarn add --dev @typescript-eslint/eslint-plugin @typescript-eslint/parser
+```
+
+```bash pnpm
+pnpm add --save-dev @typescript-eslint/eslint-plugin @typescript-eslint/parser
+```
+
+</CodeGroup>
+
+## Usage
+
+### Flat config (recommended)
+
+```js title="eslint.config.mjs"
+import tseslintPlugin from '@typescript-eslint/eslint-plugin';
+import tseslintParser from '@typescript-eslint/parser';
+
+export default [
+  {
+    plugins: {
+      '@typescript-eslint': tseslintPlugin,
+    },
+    languageOptions: {
+      parser: tseslintParser,
+      parserOptions: {
+        projectService: true,
+      },
+    },
+    rules: {
+      ...tseslintPlugin.configs['recommended'].rules,
+    },
+  },
+];
+```
+
+<Tip>
+  When using flat config, the `typescript-eslint` package provides a cleaner API for the same setup. The above is equivalent to `tseslint.configs.recommended` from the unified package.
+</Tip>
+
+### Legacy config (`.eslintrc`)
+
+```js title=".eslintrc.js"
+module.exports = {
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    project: true,
+    tsconfigRootDir: __dirname,
+  },
+  plugins: ['@typescript-eslint'],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
+  ],
+};
+```
+
+For type-aware linting in legacy config:
+
+```js title=".eslintrc.js"
+module.exports = {
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    project: true,
+    tsconfigRootDir: __dirname,
+  },
+  plugins: ['@typescript-eslint'],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended-type-checked',
+  ],
+};
+```
+
+## Available config presets
+
+The plugin ships config presets for both flat config and legacy `.eslintrc` formats. The legacy presets are accessed via `plugin:@typescript-eslint/<name>`; the flat config presets are accessed via the `flatConfigs` export.
+
+### Presets without type information
+
+| Preset name | Description |
+| ----------- | ----------- |
+| `base` | Minimal config that registers the parser and plugin. Not recommended for direct use. |
+| `eslint-recommended` | Disables ESLint core rules handled by TypeScript; enables rules that benefit from TypeScript. |
+| `recommended` | Correctness rules that can be dropped in without additional configuration. |
+| `strict` | Everything in `recommended`, plus additional rules that catch bugs. |
+| `stylistic` | Rules for code style and consistency. Does not affect program logic. |
+| `all` | Every available rule. Not recommended for most projects — many rules conflict or require configuration. |
+| `disable-type-checked` | Disables all type-aware rules and linting. Use in overrides for files that should not be type-checked. |
+
+### Presets requiring type information
+
+These presets require `parserOptions.projectService` or `parserOptions.project` to be configured.
+
+| Preset name | Description |
+| ----------- | ----------- |
+| `recommended-type-checked` | Everything in `recommended`, plus rules that require type information. |
+| `recommended-type-checked-only` | Only the type-checked additions from `recommended-type-checked`; disables corresponding ESLint core rules. |
+| `strict-type-checked` | Everything in `recommended`, `recommended-type-checked`, and `strict`, plus additional strict type-aware rules. |
+| `strict-type-checked-only` | Only the type-checked additions from `strict-type-checked`. |
+| `stylistic-type-checked` | Everything in `stylistic`, plus stylistic rules that require type information. |
+| `stylistic-type-checked-only` | Only the type-checked additions from `stylistic-type-checked`. |
+
+<Warning>
+  `recommended-requiring-type-checking` is a deprecated alias for `recommended-type-checked`. Use `recommended-type-checked` in all new configurations.
+</Warning>
+
+## Rules
+
+The `rules` export is a plain object mapping each rule name (without the `@typescript-eslint/` prefix) to a rule object. You can use this to inspect rule metadata or to build custom tooling:
+
+```ts
+import plugin from '@typescript-eslint/eslint-plugin';
+
+// list all available rule names
+const ruleNames = Object.keys(plugin.rules);
+
+// access a specific rule's metadata
+const rule = plugin.rules['no-floating-promises'];
+console.log(rule.meta.docs?.description);
+```
+
+For the full list of rules and their documentation, see the [Rules overview](/rules/overview).
